@@ -16,7 +16,7 @@ from mycv.utils.general import increment_dir
 from mycv.utils.torch_utils import load_partial, set_random_seeds, ModelEMA, reset_model_parameters
 import  mycv.utils.lr_schedulers as lr_schedulers
 from mycv.datasets.imcls import get_trainloader, imcls_evaluate
-from mycv.datasets.imagenet import get_val224l_loader
+from mycv.datasets.imagenet import get_valloader
 from mycv.datasets.constants import IMAGENET_MEAN, IMAGENET_STD
 from models.ccls import VCMClassify
 
@@ -103,8 +103,10 @@ def train():
         batch_size=cfg.batch_size, workers=cfg.workers
     )
     # test set
-    testloader = get_val224l_loader(False, batch_size=bs_each//2,
-                                    workers=cfg.workers//len(cfg.device))
+    testloader = get_valloader(split='val',
+        img_size=224, crop_ratio=1, interp='bicubic', input_norm=False,
+        cache=True, batch_size=cfg.batch_size//4, workers=cfg.workers//2
+    )
 
     # Initialize model
     if cfg.guide:
