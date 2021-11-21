@@ -400,18 +400,35 @@ def train():
 
 
 def get_parameters(model, cfg):
-    pgb, pgw = [], []
+    # different optimization setting for different layers
+    pgb, pgw, pgo = [], [], []
+    pg_info = {
+        'bn/bias': [],
+        'weights': [],
+        'other': []
+    }
     for k, v in model.named_parameters():
-        assert not k.startswith('stage')
+        assert isinstance(k, str) and isinstance(v, torch.Tensor)
         if ('.bn' in k) or ('.bias' in k): # batchnorm or bias
             pgb.append(v)
-        else: # conv weights
-            assert '.weight' in k, f'{k}'
+            pg_info['bn/bias'].append((k, v.shape))
+        elif '.weight' in k: # conv or linear weights
             pgw.append(v)
+            pg_info['weights'].append((k, v.shape))
+        else: # other parameters
+            pgo.append(v)
+            pg_info['other'].append((k, v.shape))
     parameters = [
         {'params': pgb, 'lr': cfg.lr, 'weight_decay': 0.0},
-        {'params': pgw, 'lr': cfg.lr, 'weight_decay': cfg.weight_decay},
+        {'params': pgw, 'lr': cfg.lr, 'weight_decay': cfg.wdecay},
+        {'params': pgo, 'lr': cfg.lr, 'weight_decay': 0.0}
     ]
+
+    print('optimizer parameter groups [b,w,o]:', [len(pg['params']) for pg in parameters], '\n')
+    print('pgo parameters:')
+    for k, vshape in pg_info['other']:
+        print(k, vshape)
+    print()
     return parameters
 
 
