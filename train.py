@@ -420,7 +420,7 @@ def get_parameters(model, cfg):
             pg_info['other'].append((k, v.shape))
     parameters = [
         {'params': pgb, 'lr': cfg.lr, 'weight_decay': 0.0},
-        {'params': pgw, 'lr': cfg.lr, 'weight_decay': cfg.wdecay},
+        {'params': pgw, 'lr': cfg.lr, 'weight_decay': cfg.weight_decay},
         {'params': pgo, 'lr': cfg.lr, 'weight_decay': 0.0}
     ]
 
