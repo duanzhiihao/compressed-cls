@@ -41,7 +41,7 @@ def train():
     # parser.add_argument('--amp',        type=bool, default=False)
     # parser.add_argument('--amp',        action='store_true')
     parser.add_argument('--ema',        type=bool, default=False)
-    parser.add_argument('--optimizer',  type=str,  default='SGD', choices=['Adam', 'SGD'])
+    parser.add_argument('--optimizer',  type=str,  default='sgd', choices=['adamw', 'sgd'])
     parser.add_argument('--epochs',     type=int,  default=40)
     parser.add_argument('--metric',     type=str,  default='top1')
     parser.add_argument('--device',     type=int,  default=[0], nargs='+')
@@ -165,11 +165,10 @@ def train():
     print('Parameter groups:', [len(pg['params']) for pg in parameters])
 
     # optimizer
-    if cfg.optimizer == 'SGD':
+    if cfg.optimizer.lower() == 'sgd':
         optimizer = torch.optim.SGD(parameters, lr=cfg.lr, momentum=cfg.momentum)
-    elif cfg.optimizer == 'Adam':
-        raise NotImplementedError()
-        optimizer = torch.optim.Adam(parameters, lr=cfg.lr)
+    elif cfg.optimizer.lower() == 'adamw':
+        optimizer = torch.optim.AdamW(parameters, lr=cfg.lr)
     else:
         raise NotImplementedError()
     del parameters
