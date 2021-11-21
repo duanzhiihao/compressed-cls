@@ -512,7 +512,7 @@ class ViTaa(nn.Module):
         assert model.head_dist is None
         self.head = model.head
 
-    def forward(self, x):
+    def forward(self, x, _return_cache=False):
         x = x.flatten(2).transpose(1, 2)
         cls_token = self.cls_token.expand(x.shape[0], -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
         x = torch.cat((cls_token, x), dim=1)
@@ -521,6 +521,8 @@ class ViTaa(nn.Module):
         x = self.norm(x)
         x = x[:, 0]
         x = self.head(x)
+        if _return_cache:
+            raise NotImplementedError()
         return x
 
 
