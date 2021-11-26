@@ -121,6 +121,9 @@ class VCMClassify(nn.Module):
         #     self.stage3 = CSP_(model=stage3[-1], in_ch=128, num_class=num_cls)
         elif stage3 == 'vitt-aa':
             self.stage3 = ViTaa(ch1, num_classes=num_cls)
+        elif stage3 == 'vitt':
+            from timm.models.vision_transformer import vit_tiny_patch16_224
+            self.stage3 = vit_tiny_patch16_224(pretrained=True)
         elif stage3 == '':
             self.stage3 = torch.nn.Identity()
         else:
