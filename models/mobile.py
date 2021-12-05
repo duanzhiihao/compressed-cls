@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.cuda.amp as amp
 import torchvision as tv
 
 from compressai.entropy_models import EntropyBottleneck
@@ -38,6 +39,11 @@ class ResNet50MC(nn.Module):
         self.entropy_model = EntropyBottleneck(channels)
         self.cut_after = cut_after
 
+    @amp.autocast(enabled=False)
+    def forward_entropy(self, z):
+        z, p_z = self.entropy_model(z)
+        return z, p_z
+
     def forward(self, x):
         # See note [TorchScript super()]
         x = self.conv1(x)
@@ -47,7 +53,7 @@ class ResNet50MC(nn.Module):
 
         x = self.layer1(x)
         if self.cut_after == 'layer1':
-            x, p_z = self.entropy_model(x)
+            x, p_z = self.forward_entropy(x)
         x = self.layer2(x)
         x = self.layer3(x)
         x = self.layer4(x)

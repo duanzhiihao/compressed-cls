@@ -53,7 +53,7 @@ def get_config():
     parser.add_argument('--wdecay',     type=float,default=0.0001)
     # training policy setting
     parser.add_argument('--epochs',     type=int,  default=100)
-    parser.add_argument('--amp',        type=bool, default=False)
+    parser.add_argument('--amp',        type=bool, default=True)
     parser.add_argument('--ema',        type=bool, default=True)
     # miscellaneous training setting
     parser.add_argument('--skip_eval0', action='store_true')
