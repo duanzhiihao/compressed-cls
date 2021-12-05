@@ -32,10 +32,10 @@ def get_config():
     # model setting
     parser.add_argument('--model',      type=str,  default='res50mc')
     parser.add_argument('--cut_after',  type=str,  default='layer1')
+    parser.add_argument('--lmbda',      type=float,default=1.0)
     # resume setting
     parser.add_argument('--resume',     type=str,  default='')
     parser.add_argument('--pretrain',   type=str,  default='')
-    parser.add_argument('--lmbda',      type=float,default=1.0)
     # training setting
     parser.add_argument('--train_size', type=int,  default=224)
     parser.add_argument('--aug',        type=str,  default='baseline',
@@ -160,7 +160,7 @@ class TrainWrapper():
             train_split = f'train_{cfg.group}'
             val_split = f'val_{cfg.group}'
 
-        with mytu.torch_distributed_zero_first(): # training set
+        with mytu.torch_distributed_zero_first(enabled=self.distributed): # training set
             trainloader = get_trainloader(
                 root_dir=IMAGENET_DIR/train_split,
                 aug=cfg.aug, img_size=cfg.train_size, input_norm=cfg.input_norm,
