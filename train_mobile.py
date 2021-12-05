@@ -147,18 +147,8 @@ class TrainWrapper():
 
         if self.is_main:
             print(ANSI.titlestr('Initializing Datasets and Dataloaders...'))
-        if cfg.group == 'original':
-            train_split = 'train'
-            val_split = 'val'
-        elif cfg.group[:4] == 'jpeg':
-            train_split = f'train_{cfg.group}'
-            val_split = f'val224l_{cfg.group}'
-        elif cfg.group == 'mini200':
-            train_split = 'train200_600'
-            val_split = 'val200_600'
-        else:
-            train_split = f'train_{cfg.group}'
-            val_split = f'val_{cfg.group}'
+        train_split = 'train'
+        val_split = 'val'
 
         with mytu.torch_distributed_zero_first(enabled=self.distributed): # training set
             trainloader = get_trainloader(
