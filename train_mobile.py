@@ -199,7 +199,8 @@ class TrainWrapper():
         self.model = model.to(self.device)
 
         if self.distributed: # DDP mode
-            self.model = DDP(model, device_ids=[self.local_rank], output_device=self.local_rank)
+            self.model = DDP(model, device_ids=[self.local_rank], output_device=self.local_rank,
+                             find_unused_parameters=True)
         elif len(cfg.device) > 1: # DP mode
             print(f'DP mode on GPUs {cfg.device}', '\n')
             self.model = torch.nn.DataParallel(model, device_ids=cfg.device)
