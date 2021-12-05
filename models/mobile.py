@@ -34,7 +34,7 @@ class ResNet50MC(nn.Module):
         self.fc = model.fc
 
         # 3, 4, 6, 3
-        stride2channel = {'layer1': 256}
+        stride2channel = {'layer1': 256, 'layer2': 512}
         channels = stride2channel[cut_after]
         self.entropy_model = EntropyBottleneck(channels)
         self.cut_after = cut_after
@@ -55,6 +55,8 @@ class ResNet50MC(nn.Module):
         if self.cut_after == 'layer1':
             x, p_z = self.forward_entropy(x)
         x = self.layer2(x)
+        if self.cut_after == 'layer2':
+            x, p_z = self.forward_entropy(x)
         x = self.layer3(x)
         x = self.layer4(x)
 
