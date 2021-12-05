@@ -39,7 +39,7 @@ class ResNet50MC(nn.Module):
         self.entropy_model = EntropyBottleneck(channels)
         self.cut_after = cut_after
 
-    @amp.autocast(enabled=False)
+    @amp.autocast(dtype=torch.float32)
     def forward_entropy(self, z):
         z, p_z = self.entropy_model(z)
         return z, p_z
