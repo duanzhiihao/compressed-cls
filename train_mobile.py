@@ -32,6 +32,7 @@ def get_config():
     # model setting
     parser.add_argument('--model',      type=str,  default='res50mc')
     parser.add_argument('--cut_after',  type=str,  default='layer1')
+    parser.add_argument('--entropy',    type=str,  default='simple')
     parser.add_argument('--lmbda',      type=float,default=1.0)
     # resume setting
     parser.add_argument('--resume',     type=str,  default='')
@@ -391,7 +392,10 @@ class TrainWrapper():
                     yhat, p_z = model(imgs)
                     assert yhat.shape == (imgs.shape[0], cfg.num_classes)
                     l_cls = self.loss_func(yhat, labels)
-                    bpp = compute_bpp(p_z, imgs.shape[2]*imgs.shape[3])
+                    if p_z is not None:
+                        bpp = compute_bpp(p_z, imgs.shape[2]*imgs.shape[3])
+                    else:
+                        bpp = torch.zeros(1, device=self.device)
                     loss = l_cls + cfg.lmbda * bpp
                     # loss is averaged over batch and gpus
                     loss = loss / float(cfg.accum_num)
@@ -452,7 +456,7 @@ class TrainWrapper():
     def logging(self, pbar, epoch, bi, niter, imgs, labels, yhat, p_z, l_cls, bpp, loss):
         cfg = self.cfg
         cur_lr = self.optimizer.param_groups[0]['lr']
-        bpdim = p_z.detach().mean().cpu().item()
+        bpdim = - torch.log2(p_z.detach()).mean().cpu().item() if p_z is not None else 0
         acc = compute_acc(yhat.detach(), labels)
         stats = torch.Tensor(
             [bpp.item(), bpdim, l_cls.item(), loss.item(), acc]

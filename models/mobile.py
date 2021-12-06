@@ -6,20 +6,23 @@ import torchvision as tv
 from compressai.entropy_models import EntropyBottleneck
 
 
-class QuantizationNoise(nn.Module):
+class SimpleQuantization(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):
         if self.training:
-            x = x + torch.rand_like(x) - 0.5
+            # x = x + torch.rand_like(x) - 0.5
+            xd = x.detach()
+            x = x + (torch.round(xd) - xd)
         else:
+            assert not x.requires_grad
             x = torch.round_(x)
-        return x
+        return x, None
 
 
 class ResNet50MC(nn.Module):
-    def __init__(self, cut_after='layer1'):
+    def __init__(self, cut_after='layer1', entropy_model='bottleneck'):
         super().__init__()
         model = tv.models.resnet50(pretrained=True)
         self.conv1 = model.conv1
@@ -36,7 +39,12 @@ class ResNet50MC(nn.Module):
         # 3, 4, 6, 3
         stride2channel = {'layer1': 256, 'layer2': 512}
         channels = stride2channel[cut_after]
-        self.entropy_model = EntropyBottleneck(channels)
+        if entropy_model == 'bottleneck':
+            self.entropy_model = EntropyBottleneck(channels)
+        if entropy_model == 'simple':
+            self.entropy_model = SimpleQuantization()
+        else:
+            raise ValueError()
         self.cut_after = cut_after
 
     @amp.autocast(dtype=torch.float32)
@@ -73,11 +81,13 @@ class ResNet50MC(nn.Module):
 
 def main():
     from mycv.datasets.imagenet import imagenet_val
-    model = ResNet50MC()
+    model = ResNet50MC('layer2')
+    # msd = torch.load('runs/best.pt')
+    # model.load_state_dict(msd['model'])
     model = model.cuda()
     model.eval()
 
-    resuls = imagenet_val(model, batch_size=64, workers=8)
+    resuls = imagenet_val(model, batch_size=64, workers=4)
     print(resuls)
 
 
