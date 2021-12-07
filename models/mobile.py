@@ -21,6 +21,16 @@ class SimpleQuantization(nn.Module):
         return x, None
 
 
+def get_entropy_model(name, channels):
+    if name == 'bottleneck':
+        entropy_model = EntropyBottleneck(channels)
+    elif name == 'simple':
+        entropy_model = SimpleQuantization()
+    else:
+        raise ValueError()
+    return entropy_model
+
+
 class ResNet50MC(nn.Module):
     def __init__(self, cut_after='layer1', entropy_model='bottleneck'):
         super().__init__()
@@ -39,12 +49,7 @@ class ResNet50MC(nn.Module):
         # 3, 4, 6, 3
         stride2channel = {'layer1': 256, 'layer2': 512}
         channels = stride2channel[cut_after]
-        if entropy_model == 'bottleneck':
-            self.entropy_model = EntropyBottleneck(channels)
-        if entropy_model == 'simple':
-            self.entropy_model = SimpleQuantization()
-        else:
-            raise ValueError()
+        self.entropy_model = get_entropy_model(entropy_model, channels)
         self.cut_after = cut_after
 
     @amp.autocast(dtype=torch.float32)
@@ -79,15 +84,49 @@ class ResNet50MC(nn.Module):
         return yhat
 
 
+class VGG11MC(nn.Module):
+    def __init__(self, cut_after=10, entropy_model='bottleneck'):
+        super().__init__()
+        model = tv.models.vgg.vgg11(pretrained=True)
+        self.features = model.features
+        self.avgpool = model.avgpool
+        self.classifier = model.classifier
+
+        self.cut_after = int(cut_after)
+        channels = {5: 128, 10: 256, 15: 512, 20: 512}
+        self.entropy_model = get_entropy_model(entropy_model, channels[self.cut_after])
+
+    @amp.autocast(dtype=torch.float32)
+    def forward_entropy(self, z):
+        z, p_z = self.entropy_model(z)
+        return z, p_z
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        for mi, module in enumerate(self.features):
+            x = module(x)
+            if mi == self.cut_after:
+                x, p_z = self.forward_entropy(x)
+        # x = self.features(x)
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
+        x = self.classifier(x)
+        return x, p_z
+
+    def forward_cls(self, x):
+        yhat, p_z = self.forward(x)
+        return yhat
+
+
 def main():
     from mycv.datasets.imagenet import imagenet_val
-    model = ResNet50MC('layer2')
+    # model = ResNet50MC('layer2')
+    model = VGG11MC(10)
     # msd = torch.load('runs/best.pt')
     # model.load_state_dict(msd['model'])
     model = model.cuda()
     model.eval()
 
-    resuls = imagenet_val(model, batch_size=64, workers=4)
+    resuls = imagenet_val(model, batch_size=64, workers=8)
     print(resuls)
 
 
