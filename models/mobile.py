@@ -6,26 +6,60 @@ import torchvision as tv
 from compressai.entropy_models import EntropyBottleneck
 
 
-class SimpleQuantization(nn.Module):
-    def __init__(self):
+class IntegerQuantization(nn.Module):
+    def __init__(self, n_ch):
         super().__init__()
+        self.momentum = 0.99
+        self.register_buffer('estimated_p', torch.ones(n_ch, 256).div_(256))
+        self.estimated_p: torch.Tensor
+
+    def _update_stats(self, x: torch.Tensor):
+        assert not x.requires_grad
+        x.clamp_(min=0, max=255).round_()
+        # x = x.to(dtype=torch.int64)
+        # x: (nB, nC, nH, nW)
+        x = x.permute(1, 0, 2, 3).flatten(1)
+        for i, x_i in enumerate(x):
+            hist = torch.histc(x_i, bins=256, min=0, max=255)
+            # hist = torch.bincount(x_i, minlength=256)
+            assert hist.sum() == x.shape[1]
+            pi = hist.float() / x.shape[1]
+            self.estimated_p[i, :].mul_(self.momentum).add_(pi, alpha=1-self.momentum)
+            assert torch.isclose(self.estimated_p[i, :].sum(), torch.ones(1, device=x.device))
+        debug = 1
+
+    def compute_likelihood(self, x: torch.Tensor):
+        xhat = x.detach().clone().round_().to(torch.int64)
+        assert xhat.min() >= 0
+        p_x = []
+        for i in range(xhat.shape[1]):
+            indexs = xhat[:, i, :, :]
+            p = self.estimated_p[i, indexs]
+            p_x.append(p.unsqueeze(1))
+        p_x = torch.cat(p_x, dim=1)
+        return p_x
 
     def forward(self, x: torch.Tensor):
         if self.training:
             # x = x + torch.rand_like(x) - 0.5
+            x = torch.clamp(x, max=255)
             xd = x.detach()
             x = x + (torch.round(xd) - xd)
+            self._update_stats(xd)
         else:
             assert not x.requires_grad
+            if x.max() > 255:
+                print(f'Warning: x.max() = {x.max().item()} > 255')
             x = torch.round_(x)
-        return x, None
+        p_x = self.compute_likelihood(x)
+        return x, p_x
 
 
 def get_entropy_model(name, channels):
     if name == 'bottleneck':
         entropy_model = EntropyBottleneck(channels)
-    elif name == 'simple':
-        entropy_model = SimpleQuantization()
+    elif name == 'quantize':
+        entropy_model = IntegerQuantization(channels)
     else:
         raise ValueError()
     return entropy_model
@@ -119,14 +153,14 @@ class VGG11MC(nn.Module):
 
 def main():
     from mycv.datasets.imagenet import imagenet_val
-    # model = ResNet50MC('layer2')
-    model = VGG11MC(10)
+    model = ResNet50MC('layer2', 'quantize')
+    # model = VGG11MC(10)
     # msd = torch.load('runs/best.pt')
     # model.load_state_dict(msd['model'])
     model = model.cuda()
-    model.eval()
+    # model.eval()
 
-    resuls = imagenet_val(model, batch_size=64, workers=8)
+    resuls = imagenet_val(model, batch_size=4, workers=0)
     print(resuls)
 
 

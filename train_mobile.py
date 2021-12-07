@@ -418,11 +418,9 @@ class TrainWrapper():
             if self.is_main:
                 pbar.close()
             if self.distributed: # If DDP mode, synchronize model parameters on all gpus
-                mytu.torch_distributed_check_equivalence(model)
-                mytu.torch_distributed_sync_bn_stats(model)
-                # from timm.utils.distributed import distribute_bn
-                # distribute_bn(model, cfg.world_size, reduce=True)
-                mytu.torch_distributed_check_equivalence(model)
+                mytu.torch_distributed_check_equivalence(model, log_path=self._log_dir/'ddp.txt')
+                mytu.torch_distributed_sync_buffers(model, ['running_mean', 'running_var', 'estimated_p'])
+                mytu.torch_distributed_check_equivalence(model, log_path=self._log_dir/'ddp.txt')
 
         if self.is_main:
             self.evaluate(epoch, niter)
