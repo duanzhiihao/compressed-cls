@@ -414,7 +414,8 @@ class TrainWrapper():
                     loss = l_cls + cfg.lmbda * bpp
                     # loss is averaged over batch and gpus
                     loss = loss / float(cfg.accum_num)
-                self.scaler.scale(loss).backward()
+                if loss.requires_grad:
+                    self.scaler.scale(loss).backward()
                 # gradient averaged between devices in DDP mode
                 if niter % cfg.accum_num == 0:
                     self.scaler.step(self.optimizer)
