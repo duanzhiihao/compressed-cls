@@ -395,7 +395,11 @@ class TrainWrapper():
                 pbar = tqdm(pbar, total=len(self.trainloader))
 
             self.adjust_lr_(epoch)
-            model.train()
+            if cfg.en_only:
+                model.eval()
+                model.entropy_model.train()
+            else:
+                model.train()
             for bi, (imgs, labels) in pbar:
                 niter = epoch * len(self.trainloader) + bi
 
