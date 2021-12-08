@@ -229,6 +229,7 @@ class TrainWrapper():
         if cfg.en_only:
             for p in model.parameters():
                 p.requires_grad_(False)
+            list(model.parameters())[-1].requires_grad_(True)
             for p in model.entropy_model.parameters():
                 p.requires_grad_(True)
             _parameters = model.entropy_model.named_parameters()
@@ -414,8 +415,7 @@ class TrainWrapper():
                     loss = l_cls + cfg.lmbda * bpp
                     # loss is averaged over batch and gpus
                     loss = loss / float(cfg.accum_num)
-                if loss.requires_grad:
-                    self.scaler.scale(loss).backward()
+                self.scaler.scale(loss).backward()
                 # gradient averaged between devices in DDP mode
                 if niter % cfg.accum_num == 0:
                     self.scaler.step(self.optimizer)
