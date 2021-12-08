@@ -27,13 +27,14 @@ def get_config():
     parser = argparse.ArgumentParser()
     # wandb setting
     parser.add_argument('--project',    type=str,  default='mobile-cloud')
-    parser.add_argument('--group',      type=str,  default='resnet')
+    parser.add_argument('--group',      type=str,  default='mobile')
     parser.add_argument('--wbmode',     type=str,  default='disabled')
     # model setting
-    parser.add_argument('--model',      type=str,  default='res50mc')
-    parser.add_argument('--cut_after',  type=str,  default='layer1')
-    parser.add_argument('--entropy',    type=str,  default='simple')
+    parser.add_argument('--model',      type=str,  default='mobilev3mc')
+    parser.add_argument('--cut_after',  type=str,  default='2')
+    parser.add_argument('--entropy',    type=str,  default='quantize')
     parser.add_argument('--lmbda',      type=float,default=1.0)
+    parser.add_argument('--en_only',    action='store_true')
     # resume setting
     parser.add_argument('--resume',     type=str,  default='')
     parser.add_argument('--pretrain',   type=str,  default='')
@@ -222,7 +223,15 @@ class TrainWrapper():
             'weights': [],
             'other': []
         }
-        for k, v in model.named_parameters():
+        if cfg.en_only:
+            for p in model.parameters():
+                p.requires_grad_(False)
+            for p in model.entropy_model.parameters():
+                p.requires_grad_(True)
+            _parameters = model.entropy_model.named_parameters()
+        else:
+            _parameters = model.named_parameters()
+        for k, v in _parameters:
             assert isinstance(k, str) and isinstance(v, torch.Tensor)
             if ('.bn' in k) or ('.bias' in k): # batchnorm or bias
                 pgb.append(v)
@@ -494,7 +503,14 @@ class TrainWrapper():
         # Evaluation
         _log_dic = {'general/epoch': epoch}
         _eval_model = mytu.de_parallel(self.model)
+        _eval_model.eval()
+        _eval_model.init_testing()
         results = imcls_evaluate(_eval_model, testloader=self.valloader)
+        num, bpp, bpd = _eval_model.testing_stats
+        results.update({
+            'bits_per_pixel': bpp,
+            'bits_per_dim': bpd
+        })
         _log_dic.update({'metric/plain_val_'+k: v for k,v in results.items()})
         # save last checkpoint
         checkpoint = {
@@ -508,11 +524,18 @@ class TrainWrapper():
         self._save_if_best(checkpoint)
 
         if self.cfg.ema:
-            results = imcls_evaluate(self.ema.ema, testloader=self.valloader)
+            _ema = self.ema.ema.eval()
+            _ema.init_testing()
+            results = imcls_evaluate(_ema, testloader=self.valloader)
+            num, bpp, bpd = _eval_model.testing_stats
+            results.update({
+                'bits_per_pixel': bpp,
+                'bits_per_dim': bpd
+            })
             _log_dic.update({f'metric/ema_val_'+k: v for k,v in results.items()})
             # save last checkpoint of EMA
             checkpoint = {
-                'model'     : self.ema.ema.state_dict(),
+                'model'     : _ema.state_dict(),
                 'epoch'     : epoch,
                 'results'   : results,
             }
