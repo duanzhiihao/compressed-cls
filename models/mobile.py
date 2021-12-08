@@ -86,8 +86,9 @@ class MobileCloudBase(nn.Module):
     def init_testing(self):
         self.testing_stats = (0, 0.0, 0.0) # num, bpp, bits per dim
 
-    @amp.autocast(dtype=torch.float32)
+    @amp.autocast(enabled=False)
     def forward_entropy(self, z):
+        z = z.float()
         z, p_z = self.entropy_model(z)
         return z, p_z
 
