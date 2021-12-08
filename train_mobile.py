@@ -229,6 +229,7 @@ class TrainWrapper():
         if cfg.en_only:
             for p in model.parameters():
                 p.requires_grad_(False)
+            list(model.parameters())[-1].requires_grad_(True)
             for p in model.entropy_model.parameters():
                 p.requires_grad_(True)
             _parameters = model.entropy_model.named_parameters()
