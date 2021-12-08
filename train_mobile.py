@@ -72,7 +72,7 @@ def get_config():
     # EMA
     cfg.ema_warmup_epochs = max(round(cfg.epochs / 20), 1)
     # logging
-    cfg.metric = 'top1' # metric to save best model
+    cfg.metric = 'rate-err' # metric to save best model
 
     # visible device setting
     os.environ['CUDA_VISIBLE_DEVICES'] = str(cfg.device)[1:-1]
@@ -516,7 +516,8 @@ class TrainWrapper():
         num, bpp, bpd = _eval_model.testing_stats
         results.update({
             'bits_per_pixel': bpp,
-            'bits_per_dim': bpd
+            'bits_per_dim': bpd,
+            'rate-err': bpp + 1 - results['top1']
         })
         _log_dic.update({'metric/plain_val_'+k: v for k,v in results.items()})
         # save last checkpoint
@@ -537,7 +538,8 @@ class TrainWrapper():
             num, bpp, bpd = _eval_model.testing_stats
             results.update({
                 'bits_per_pixel': bpp,
-                'bits_per_dim': bpd
+                'bits_per_dim': bpd,
+                'rate-err': bpp + 1 - results['top1']
             })
             _log_dic.update({f'metric/ema_val_'+k: v for k,v in results.items()})
             # save last checkpoint of EMA
@@ -564,11 +566,11 @@ class TrainWrapper():
         # save checkpoint if it is the best so far
         metric = self.cfg.metric
         fitness = checkpoint['results'][metric]
-        if fitness > self._best_fitness:
+        if fitness < self._best_fitness:
             self._best_fitness = fitness
             svpath = self._log_dir / 'best.pt'
             torch.save(checkpoint, svpath)
-            print(f'Get highest {metric} = {fitness}. Saved to {svpath}.')
+            print(f'Get best {metric} = {fitness}. Saved to {svpath}.')
 
 
 def compute_acc(p: torch.Tensor, labels: torch.LongTensor):
