@@ -18,7 +18,6 @@ class IntegerQuantization(nn.Module):
     def _update_stats(self, x: torch.Tensor):
         assert not x.requires_grad
         x.clamp_(min=-255, max=256).round_()
-        x = x + 255
         # x = x.to(dtype=torch.int64)
         # x: (nB, nC, nH, nW)
         x = x.permute(1, 0, 2, 3).flatten(1)
