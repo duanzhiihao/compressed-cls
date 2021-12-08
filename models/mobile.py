@@ -13,6 +13,11 @@ class IntegerQuantization(nn.Module):
         self.register_buffer('estimated_p', torch.ones(n_ch, 256).div_(256))
         self.estimated_p: torch.Tensor
 
+        self.testing_stats = (0, 0.0, 0.0) # num, bpp, bpdim
+
+    def init_testing(self):
+        self.testing_stats = (0, 0.0, 0.0) # num, bpp, bpdim
+
     def _update_stats(self, x: torch.Tensor):
         assert not x.requires_grad
         x.clamp_(min=0, max=255).round_()
@@ -52,6 +57,9 @@ class IntegerQuantization(nn.Module):
                 print(f'Warning: x.max() = {x.max().item()} > 255')
             x = torch.round_(x)
         p_x = self.compute_likelihood(x)
+        # if not self.training: # update testing stats
+        #     num, bpp, bpdim = self.testing_stats
+        #     bpp = 
         return x, p_x
 
 
@@ -158,7 +166,7 @@ def main():
     # msd = torch.load('runs/best.pt')
     # model.load_state_dict(msd['model'])
     model = model.cuda()
-    # model.eval()
+    model.eval()
 
     resuls = imagenet_val(model, batch_size=4, workers=0)
     print(resuls)
