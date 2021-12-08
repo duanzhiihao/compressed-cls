@@ -14,7 +14,7 @@ class IntegerQuantization(nn.Module):
         self.momentum = 0.99
         self.register_buffer('estimated_p', torch.ones(n_ch, 512).div_(512))
         self.estimated_p: torch.Tensor
-        self.dummy = nn.parameter.Parameter(torch.zeros(6))
+        self.dummy = nn.parameter.Parameter(torch.zeros(1,n_ch,1,1))
 
     def _update_stats(self, x: torch.Tensor):
         assert not x.requires_grad
