@@ -51,8 +51,7 @@ class IntegerQuantization(nn.Module):
             self._update_stats(xd)
         else:
             assert not x.requires_grad
-            if x.abs().max() > 255:
-                print(f'Warning: x.max() = {x.max().item()} > 255')
+            x.clamp_(min=-255, max=256)
             x = torch.round_(x)
         p_x = self.compute_likelihood(x)
         x = x + self.dummy
