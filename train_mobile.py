@@ -190,6 +190,9 @@ class TrainWrapper():
         elif mname == 'vgg1mc':
             from models.mobile import VGG11MC
             model = VGG11MC(cfg.cut_after, cfg.entropy)
+        elif mname == 'mobilev3mc':
+            from models.mobile import MobileV3MC
+            model = MobileV3MC(cfg.cut_after, cfg.entropy)
         elif mname == 'efb0':
             from timm.models.efficientnet import efficientnet_b0
             model = efficientnet_b0(drop_rate=0.2, drop_path_rate=0.2)

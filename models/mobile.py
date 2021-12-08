@@ -177,7 +177,7 @@ class VGG11MC(MobileCloudBase):
 
 
 class MobileV3MC(MobileCloudBase):
-    def __init__(self, cut_after=4, entropy_model='bottleneck'):
+    def __init__(self, cut_after=2, entropy_model='bottleneck'):
         super().__init__()
         from timm.models.mobilenetv3 import mobilenetv3_large_100
         model = mobilenetv3_large_100(pretrained=True)
