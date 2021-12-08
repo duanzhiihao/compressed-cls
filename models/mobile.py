@@ -25,7 +25,7 @@ class IntegerQuantization(nn.Module):
         for i, x_i in enumerate(x):
             hist = torch.histc(x_i, bins=512, min=-255, max=256)
             # hist = torch.bincount(x_i, minlength=256)
-            assert hist.sum() == x.shape[1]
+            assert hist.sum() == x.shape[1], f'hist{hist.shape}sum={hist.sum()}, x{x.shape}'
             pi = hist.float() / x.shape[1]
             self.estimated_p[i, :].mul_(self.momentum).add_(pi, alpha=1-self.momentum)
             assert torch.isclose(self.estimated_p[i, :].sum(), torch.ones(1, device=x.device))
