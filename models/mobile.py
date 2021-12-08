@@ -55,6 +55,8 @@ class IntegerQuantization(nn.Module):
                 print(f'Warning: x.max() = {x.max().item()} > 255')
             x = torch.round_(x)
         p_x = self.compute_likelihood(x)
+        x = x + self.dummy
+        x = x - self.dummy
         return x, p_x
 
 
