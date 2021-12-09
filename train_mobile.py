@@ -35,6 +35,7 @@ def get_config():
     parser.add_argument('--entropy',    type=str,  default='quantize')
     parser.add_argument('--lmbda',      type=float,default=1.0)
     parser.add_argument('--en_only',    action='store_true')
+    parser.add_argument('--detach',     action='store_true')
     # resume setting
     parser.add_argument('--resume',     type=str,  default='')
     parser.add_argument('--pretrain',   type=str,  default='')
@@ -203,6 +204,9 @@ class TrainWrapper():
 
         if cfg.pretrain: # (partially or fully) initialize from pretrained weights
             mytu.load_partial(model, cfg.pretrain, verbose=self.is_main)
+
+        if cfg.detach:
+            model.detach = True
 
         self.model = model.to(self.device)
 
