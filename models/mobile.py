@@ -59,6 +59,28 @@ class IntegerQuantization(nn.Module):
         return x, p_x
 
 
+class AEEntropy(nn.Module):
+    def __init__(self, n_ch):
+        super().__init__()
+        self.entropy = EntropyBottleneck(n_ch)
+        self.enc = nn.Sequential(
+            nn.Conv2d(n_ch, n_ch, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(n_ch, n_ch, kernel_size=3, stride=1, padding=1),
+        )
+        self.dec = nn.Sequential(
+            nn.Conv2d(n_ch, n_ch, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(n_ch, n_ch, kernel_size=3, stride=2, output_padding=1, padding=1)
+        )
+
+    def forward(self, x):
+        z = self.enc(x)
+        zhat, p_z = self.entropy(z)
+        xhat = self.dec(zhat)
+        return xhat, p_z
+
+
 class Identidty(nn.Module):
     def __init__(self):
         super().__init__()
@@ -72,6 +94,8 @@ def get_entropy_model(name, channels):
         entropy_model = EntropyBottleneck(channels)
     elif name == 'quantize':
         entropy_model = IntegerQuantization(channels)
+    elif name == 'ae_bottleneck':
+        entropy_model = AEEntropy(channels)
     elif name == 'identity':
         entropy_model = Identidty()
     else:
