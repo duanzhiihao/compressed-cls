@@ -4,7 +4,7 @@ import torch.nn.functional as tnf
 import torch.cuda.amp as amp
 import torchvision as tv
 
-from compressai.entropy_models import EntropyBottleneck
+from compressai.entropy_models import EntropyBottleneck, GaussianConditional
 from mycv.utils.coding import compute_bpp
 
 
@@ -96,6 +96,9 @@ def get_entropy_model(name, channels):
         entropy_model = IntegerQuantization(channels)
     elif name == 'ae_bottleneck':
         entropy_model = AEEntropy(channels)
+    elif name == 'hyper':
+        raise NotImplementedError()
+        entropy_model = GaussianConditional(None)
     elif name == 'identity':
         entropy_model = Identidty()
     else:

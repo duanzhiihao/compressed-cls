@@ -319,7 +319,7 @@ class TrainWrapper():
             rid = None
         # initialize wandb
         import wandb
-        run_name = self._log_dir.stem
+        run_name = f'{self._log_dir.stem}-{cfg.entropy}'
         wbrun = wandb.init(project=cfg.project, group=cfg.group, name=run_name,
                            config=cfg, dir='runs/', id=rid, resume='allow',
                            save_code=True, mode=cfg.wbmode)
