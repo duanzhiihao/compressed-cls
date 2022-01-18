@@ -153,7 +153,7 @@ class TrainWrapper():
         train_split = 'train'
         val_split = 'val'
 
-        with mytu.torch_distributed_zero_first(enabled=self.distributed): # training set
+        with mytu.torch_distributed_zero_first(): # training set
             trainloader = get_trainloader(
                 root_dir=IMAGENET_DIR/train_split,
                 aug=cfg.aug, img_size=cfg.train_size, input_norm=cfg.input_norm,
