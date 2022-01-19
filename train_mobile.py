@@ -221,7 +221,7 @@ class TrainWrapper():
         cfg, model = self.cfg, self.model
 
         # different optimization setting for different layers
-        pgb, pgw, pgo = [], [], []
+        pgen, pgb, pgw, pgo = [], [], [], []
         pg_info = {
             'bn/bias': [],
             'weights': [],
@@ -237,7 +237,9 @@ class TrainWrapper():
             _parameters = model.named_parameters()
         for k, v in _parameters:
             assert isinstance(k, str) and isinstance(v, torch.Tensor)
-            if ('.bn' in k) or ('.bias' in k): # batchnorm or bias
+            if 'entropy_model' in k:
+                pgen.append(v)
+            elif ('.bn' in k) or ('.bias' in k): # batchnorm or bias
                 pgb.append(v)
                 pg_info['bn/bias'].append((k, v.shape))
             elif '.weight' in k: # conv or linear weights
@@ -247,6 +249,7 @@ class TrainWrapper():
                 pgo.append(v)
                 pg_info['other'].append((k, v.shape))
         parameters = [
+            {'params': pgen, 'lr': cfg.lr*10, 'weight_decay': 0.0},
             {'params': pgb, 'lr': cfg.lr, 'weight_decay': 0.0},
             {'params': pgw, 'lr': cfg.lr, 'weight_decay': cfg.wdecay},
             {'params': pgo, 'lr': cfg.lr, 'weight_decay': 0.0}
