@@ -249,7 +249,7 @@ class TrainWrapper():
                 pgo.append(v)
                 pg_info['other'].append((k, v.shape))
         parameters = [
-            {'params': pgen, 'lr': cfg.lr*10, 'weight_decay': 0.0},
+            {'params': pgen, 'lr': cfg.lr, 'weight_decay': 0.0},
             {'params': pgb, 'lr': cfg.lr, 'weight_decay': 0.0},
             {'params': pgw, 'lr': cfg.lr, 'weight_decay': cfg.wdecay},
             {'params': pgo, 'lr': cfg.lr, 'weight_decay': 0.0}
