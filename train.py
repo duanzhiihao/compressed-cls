@@ -82,7 +82,7 @@ def train():
 
     # Dataset
     print('Initializing Datasets and Dataloaders...')
-    if cfg.group == 'imagenet':
+    if cfg.group.startswith('imagenet'):
         train_split = 'train'
         val_split = 'val'
         cfg.num_class = 1000
