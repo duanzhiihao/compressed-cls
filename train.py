@@ -347,7 +347,6 @@ def train():
                 torch.cuda.reset_peak_memory_stats()
                 wbrun.log({
                     'general/lr': cur_lr,
-                    'metric/train_acc': train_acc,
                     'train/train_loss': train_loss,
                     'train/train_trs': train_trs,
                     'train/train_acc': train_acc,
