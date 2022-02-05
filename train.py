@@ -373,6 +373,7 @@ def train():
 
         # Evaluation
         if epoch % eval_interval == 0:
+            model.eval()
             _log_dic = {'general/epoch': epoch}
             results = imcls_evaluate(_eval_model, testloader=testloader)
             _log_dic.update({'metric/plain_val_'+k: v for k,v in results.items()})
@@ -390,6 +391,7 @@ def train():
             if results[metric] > best_fitness:
                 best_fitness = results[metric]
                 torch.save(checkpoint, log_dir / 'best.pt')
+            model.train()
         # save last checkpoint
         torch.save(checkpoint, log_dir / 'last.pt')
         del checkpoint, _save_model, _eval_model
