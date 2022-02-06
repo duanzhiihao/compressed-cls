@@ -353,6 +353,77 @@ class VGG11aa(nn.Module):
         return x
 
 
+def convrelu(in_ch, out_ch, kernel_size=3, stride=1, padding=1):
+    m = nn.Sequential(
+        nn.Conv2d(in_ch, out_ch, kernel_size=kernel_size, stride=stride, padding=padding),
+        nn.ReLU(inplace=True)
+    )
+    return m
+
+
+class VGG11Teacher(nn.Module):
+    def __init__(self, num_classes=1000):
+        super().__init__()
+        block_num = [1, 1, 2, 2, 2]
+        self.m1 = nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2)
+        )
+        self.m2 = nn.Sequential(
+            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2)
+        )
+        self.m3 = nn.Sequential(
+            nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2)
+        )
+        self.m4 = nn.Sequential(
+            nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2)
+        )
+        self.m5 = nn.Sequential(
+            nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2)
+        )
+        self.avgpool = nn.AdaptiveAvgPool2d((7, 7))
+        self.classifier = nn.Sequential(
+            nn.Linear(512 * 7 * 7, 4096),
+            nn.ReLU(True),
+            nn.Dropout(),
+            nn.Linear(4096, 4096),
+            nn.ReLU(True),
+            nn.Dropout(),
+            nn.Linear(4096, num_classes),
+        )
+        wpath = MYCV_DIR / 'weights/vgg/vgg11-tv.pth'
+        msd = torch.load(wpath)
+        self.load_state_dict(msd)
+
+    def forward(self, x, _return_cache=False):
+        x1 = self.m1(x)
+        x2 = self.m2(x1)
+        x3 = self.m3(x2)
+        x4 = self.m4(x3)
+        x5 = self.m5(x4)
+        x = self.avgpool(x5)
+        x = torch.flatten(x, 1)
+        x = self.classifier(x)
+        if _return_cache:
+            return x, x2, x3, x4, x5
+        return x
+
+
 def _forward(self, x, _return_cache=False):
     imh, imw = x.shape[2:4]
 
@@ -533,6 +604,16 @@ class ViTaa(nn.Module):
 if __name__ == "__main__":
     from tqdm import tqdm
     from mycv.utils.torch_utils import num_params, load_partial, weights_replace, model_benchmark
+    from mycv.datasets.imagenet import imagenet_val
+
+    if True: # evaluate teacher
+        model = VGG11Teacher()
+        model = model.cuda()
+        model.eval()
+        results = imagenet_val(model, img_size=224, input_norm='imagenet',
+                               batch_size=64, workers=4)
+        print(results)
+        exit()
 
     # model = VCMClassify(
     #     stage1='',

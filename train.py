@@ -124,8 +124,8 @@ def train():
             load_partial(tgtmodel, wpath, verbose=True)
         elif 'vgg11' in cfg.s3:
             print('Using target model VGG11...')
-            from mycv.models.cls.vgg import VGG11
-            tgtmodel = VGG11(num_classes=cfg.num_class, pretrained=True)
+            from models.ccls import VGG11Teacher
+            tgtmodel = VGG11Teacher()
         else:
             raise ValueError()
 
