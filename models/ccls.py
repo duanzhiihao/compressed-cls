@@ -149,8 +149,7 @@ class VCMClassify(nn.Module):
                 self.input_std = self.input_std.to(device=x.device)
                 x.sub_(self.input_mean).div_(self.input_std)
 
-        # x = self.stage3(x, _return_cache)
-        x = self.stage3(x)
+        x = self.stage3(x, _return_cache)
         return x
 
     def forward_nic(self, imgs):

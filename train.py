@@ -45,7 +45,7 @@ def train():
     parser.add_argument('--epochs',     type=int,  default=40)
     parser.add_argument('--metric',     type=str,  default='top1')
     parser.add_argument('--device',     type=int,  default=[0], nargs='+')
-    parser.add_argument('--workers',    type=int,  default=4)
+    parser.add_argument('--workers',    type=int,  default=0)
     parser.add_argument('--fixseed',    action='store_true')
     parser.add_argument('--nopretrain', action='store_true')
     parser.add_argument('--wbmode',     type=str,  default='disabled')
