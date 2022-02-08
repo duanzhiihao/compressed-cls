@@ -8,6 +8,7 @@ import time
 from tqdm import tqdm
 from collections import defaultdict
 import torch
+import torch.nn.functional as tnf
 import torch.cuda.amp as amp
 from torch.nn.parallel import DistributedDataParallel as DDP
 
@@ -36,6 +37,8 @@ def get_config():
     parser.add_argument('--lmbda',      type=float,default=1.0)
     parser.add_argument('--en_only',    action='store_true')
     parser.add_argument('--detach',     type=int,  default=-1)
+    parser.add_argument('--teacher',    type=str,  default='')
+    parser.add_argument('--eval_teach', action='store_true')
     # resume setting
     parser.add_argument('--resume',     type=str,  default='')
     parser.add_argument('--pretrain',   type=str,  default='')
@@ -206,6 +209,28 @@ class TrainWrapper():
             mytu.load_partial(model, cfg.pretrain, verbose=self.is_main)
 
         self.model = model.to(self.device)
+
+        if cfg.teacher == 'res50tv':
+            from models.teachers import ResNetTeacher
+            teacher = ResNetTeacher(source='torchvision')
+        elif cfg.teacher == 'res50timm':
+            from models.teachers import ResNetTeacher
+            teacher = ResNetTeacher(source='timm')
+        elif cfg.teacher == '':
+            from models.teachers import DummyTeacher
+            teacher = DummyTeacher(feature_num=len(self.model.cache))
+        else:
+            raise ValueError()
+        for p in teacher.parameters():
+            p.requires_grad_(False)
+        self.teacher = teacher.to(self.device)
+
+        if self.is_main and cfg.eval_teach: # test set
+            self.teacher.eval()
+            print(f'Evaluating teacher model {type(self.teacher)}...')
+            results = imcls_evaluate(self.teacher, testloader=self.valloader)
+            print(results, '\n')
+        self.teacher.train()
 
         if self.distributed: # DDP mode
             self.model = DDP(model, device_ids=[self.local_rank], output_device=self.local_rank,
@@ -415,6 +440,11 @@ class TrainWrapper():
                 imgs = imgs.to(device=self.device)
                 labels = labels.to(device=self.device)
 
+                # teacher model
+                with torch.no_grad():
+                    tgt_logits = self.teacher(imgs)
+                    teacher_features = self.teacher.cache
+
                 # forward
                 with amp.autocast(enabled=cfg.amp):
                     yhat, p_z = model(imgs)
@@ -424,7 +454,20 @@ class TrainWrapper():
                         bpp = compute_bpp(p_z, imgs.shape[2]*imgs.shape[3])
                     else:
                         bpp = torch.zeros(1, device=self.device)
-                    loss = l_cls + cfg.lmbda * bpp
+
+                    # teacher-student loss
+                    student_features = model.cache
+                    l_trs = []
+                    assert len(student_features) == len(teacher_features)
+                    for fake, real in zip(student_features, teacher_features):
+                        if (fake is not None) and (real is not None):
+                            assert fake.shape == real.shape, f'fake{fake.shape}, real{real.shape}'
+                            _lt = tnf.mse_loss(fake, real, reduction='mean')
+                            l_trs.append(_lt)
+                        else:
+                            l_trs.append(torch.zeros(1, device=self.device))
+
+                    loss = l_cls + cfg.lmbda * bpp + sum(l_trs)
                     # loss is averaged over batch and gpus
                     loss = loss / float(cfg.accum_num)
                 self.scaler.scale(loss).backward()
@@ -439,7 +482,7 @@ class TrainWrapper():
                         #     self.ema.updates = 0
 
                 if self.is_main:
-                    self.logging(pbar, epoch, bi, niter, imgs, labels, yhat, p_z, l_cls, bpp, loss)
+                    self.logging(pbar, epoch, bi, niter, imgs, labels, yhat, p_z, l_cls, bpp, loss, l_trs)
             if self.is_main:
                 pbar.close()
             if self.distributed: # If DDP mode, synchronize model parameters on all gpus
@@ -470,7 +513,8 @@ class TrainWrapper():
             param_group['lr'] = cfg.lr * lrf
 
     def init_logging_(self):
-        self._epoch_stat_keys = ['bpp', 'bpdim', 'l_cls', 'loss', 'tr_acc %']
+        l_trs = [f'trs_{i}' for i in range(len(self.model.cache))]
+        self._epoch_stat_keys = ['bpp', 'bpdim', 'l_cls', *l_trs , 'loss', 'tr_acc %']
         self._epoch_stat_vals = torch.zeros(len(self._epoch_stat_keys))
         sn = 5 + len(self._epoch_stat_keys)
         self._pbar_title = ('{:^10s}|' * sn).format(
@@ -479,13 +523,15 @@ class TrainWrapper():
         self._pbar_title = ANSI.headerstr(self._pbar_title)
         self._msg = ''
 
-    def logging(self, pbar, epoch, bi, niter, imgs, labels, yhat, p_z, l_cls, bpp, loss):
+    @torch.no_grad()
+    def logging(self, pbar, epoch, bi, niter, imgs, labels, yhat, p_z, l_cls, bpp, loss, l_trs):
         cfg = self.cfg
         cur_lr = self.optimizer.param_groups[0]['lr']
         bpdim = - torch.log2(p_z.detach()).mean().cpu().item() if p_z is not None else 0
         acc = compute_acc(yhat.detach(), labels)
+        l_trs = [t.item() for t in l_trs]
         stats = torch.Tensor(
-            [bpp.item(), bpdim, l_cls.item(), loss.item(), acc]
+            [bpp.item(), bpdim, l_cls.item(), *l_trs, loss.item(), acc]
         )
         self._epoch_stat_vals.mul_(bi).add_(stats).div_(bi+1)
         mem = torch.cuda.max_memory_allocated(self.device) / 1e9
