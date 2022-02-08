@@ -109,7 +109,7 @@ class VCMClassify(nn.Module):
             wpath = MYCV_DIR / 'weights/efficientnet/efb0_7.pt'
             load_partial(self.stage3, wpath, verbose=verbose)
         elif stage3 == 'vgg11-aa':
-            self.stage3 = VGG11aa(num_classes=num_cls)
+            self.stage3 = VGG11aa(ch1, num_classes=num_cls)
             wpath = MYCV_DIR / 'weights/vgg/vgg11-tv.pth'
             load_partial(self.stage3, wpath, verbose=verbose)
         elif stage3 == 'vgg11':
@@ -295,10 +295,10 @@ class ResNet_aa_spc(nn.Module):
 
 
 class VGG11aa(nn.Module):
-    def __init__(self, num_classes=1000):
+    def __init__(self, in_ch=192, num_classes=1000):
         super().__init__()
         self.m1 = nn.Sequential(
-            nn.Conv2d(192, 64*16, kernel_size=3, padding=1),
+            nn.Conv2d(in_ch, 64*16, kernel_size=3, padding=1),
             nn.PixelShuffle(4)
         )
         self.m2 = nn.Sequential(
