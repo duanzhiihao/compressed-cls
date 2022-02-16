@@ -459,7 +459,7 @@ class TrainWrapper():
                         bpp = torch.zeros(1, device=self.device)
 
                     # teacher-student loss
-                    student_features = model.cache
+                    student_features = mytu.de_parallel(model).cache
                     l_trs = []
                     assert len(student_features) == len(teacher_features)
                     for fake, real in zip(student_features, teacher_features):
