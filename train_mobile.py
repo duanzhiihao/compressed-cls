@@ -28,7 +28,7 @@ def get_config():
     parser = argparse.ArgumentParser()
     # wandb setting
     parser.add_argument('--project',    type=str,  default='mobile-cloud')
-    parser.add_argument('--group',      type=str,  default='mobile')
+    parser.add_argument('--group',      type=str,  default='default')
     parser.add_argument('--wbmode',     type=str,  default='disabled')
     # model setting
     parser.add_argument('--model',      type=str,  default='mobilev3mc')
@@ -50,7 +50,7 @@ def get_config():
     parser.add_argument('--val_size',   type=int,  default=224)
     parser.add_argument('--val_crop_r', type=float,default=0.875)
     # optimization setting
-    parser.add_argument('--batch_size', type=int,  default=256)
+    parser.add_argument('--batch_size', type=int,  default=64)
     parser.add_argument('--accum_num',  type=int,  default=1)
     parser.add_argument('--optimizer',  type=str,  default='sgd')
     parser.add_argument('--lr',         type=float,default=0.01)
@@ -66,7 +66,7 @@ def get_config():
     # device setting
     parser.add_argument('--fixseed',    action='store_true')
     parser.add_argument('--device',     type=int,  default=[0], nargs='+')
-    parser.add_argument('--workers',    type=int,  default=8)
+    parser.add_argument('--workers',    type=int,  default=0)
     cfg = parser.parse_args()
 
     # model
@@ -200,6 +200,9 @@ class TrainWrapper():
         elif mname == 'efb0':
             from timm.models.efficientnet import efficientnet_b0
             model = efficientnet_b0(drop_rate=0.2, drop_path_rate=0.2)
+        elif mname == 'irvine':
+            from models.irvine2022wacv import BottleneckResNetBackbone
+            model = BottleneckResNetBackbone()
         else:
             raise ValueError()
         if self.is_main:

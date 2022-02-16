@@ -3,6 +3,7 @@ import torch.nn as nn
 
 from compressai.layers.gdn import GDN1
 from compressai.models.google import FactorizedPrior
+from models.mobile import MobileCloudBase
 
 
 class BottleneckResNetLayerWithIGDN(FactorizedPrior):
@@ -39,7 +40,7 @@ class BottleneckResNetLayerWithIGDN(FactorizedPrior):
         #         self.entropy_bottleneck.dequantize(self.entropy_bottleneck.quantize(encoded_output, 'dequantize'))
         #     decoder_input = decoder_input.detach()
         #     return self.decoder(decoder_input)
-
+        x = x.float()
         z = self.encoder(x)
         z_hat, z_probs = self.entropy_bottleneck(z)
         x_hat = self.decoder(z_hat)
@@ -60,7 +61,7 @@ class BottleneckResNetLayerWithIGDN(FactorizedPrior):
     #     return self.decoder(latent_hat)
 
 
-class BottleneckResNetBackbone(nn.Module):
+class BottleneckResNetBackbone(MobileCloudBase):
     def __init__(self, num_classes=1000):
         super().__init__()
         self.bottleneck_layer = BottleneckResNetLayerWithIGDN(24, 256)
@@ -89,6 +90,9 @@ class BottleneckResNetBackbone(nn.Module):
 
         self.cache = [None, x2, x3, x4]
         return y, probs
+
+    def forward_entropy(self, z):
+        raise NotImplementedError()
 
     # def update(self):
     #     self.bottleneck_layer.update()

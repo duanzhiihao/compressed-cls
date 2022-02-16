@@ -16,20 +16,24 @@ class ResNetTeacher(nn.Module):
         super().__init__()
         if source == 'torchvision':
             from torchvision.models.resnet import resnet50
+            _model = resnet50(pretrained=True)
+            self.act1  = _model.relu
+            self.global_pool = _model.avgpool
         elif source == 'timm':
             from timm.models.resnet import resnet50
+            _model = resnet50(pretrained=True)
+            self.act1  = _model.act1
+            self.global_pool = _model.global_pool
         else:
             raise ValueError()
-        _model = resnet50(pretrained=True)
         self.conv1 = _model.conv1
-        self.bn1   = _model.bn1
-        self.act1  = _model.act1
+        self.bn1 = _model.bn1
         self.maxpool = _model.maxpool
+
         self.layer1 = _model.layer1
         self.layer2 = _model.layer2
         self.layer3 = _model.layer3
         self.layer4 = _model.layer4
-        self.global_pool = _model.global_pool
         self.fc = _model.fc
         self.cache = [None, None, None, None]
 
@@ -44,6 +48,7 @@ class ResNetTeacher(nn.Module):
         x3 = self.layer3(x2)
         x4 = self.layer4(x3)
         x = self.global_pool(x4)
+        x = torch.flatten(x, 1)
         x = self.fc(x)
         self.cache = [x1, x2, x3, x4]
         return x
