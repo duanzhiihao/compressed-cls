@@ -516,7 +516,7 @@ class TrainWrapper():
             param_group['lr'] = cfg.lr * lrf
 
     def init_logging_(self):
-        l_trs = [f'trs_{i}' for i in range(len(self.model.cache))]
+        l_trs = [f'trs_{i}' for i in range(len(mytu.de_parallel(self.model).cache))]
         self._epoch_stat_keys = ['bpp', 'bpdim', 'l_cls', *l_trs , 'loss', 'tr_acc %']
         self._epoch_stat_vals = torch.zeros(len(self._epoch_stat_keys))
         sn = 5 + len(self._epoch_stat_keys)
