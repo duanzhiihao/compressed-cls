@@ -443,13 +443,13 @@ class TrainWrapper():
                 imgs = imgs.to(device=self.device)
                 labels = labels.to(device=self.device)
 
-                # teacher model
-                with torch.no_grad():
-                    tgt_logits = self.teacher(imgs)
-                    teacher_features = self.teacher.cache
-
                 # forward
                 with amp.autocast(enabled=cfg.amp):
+                    # teacher model
+                    with torch.no_grad():
+                        tgt_logits = self.teacher(imgs)
+                        teacher_features = self.teacher.cache
+
                     yhat, p_z = model(imgs)
                     assert yhat.shape == (imgs.shape[0], cfg.num_classes)
                     l_cls = self.loss_func(yhat, labels)
