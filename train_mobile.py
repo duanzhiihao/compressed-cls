@@ -100,14 +100,14 @@ class TrainWrapper():
             elif len(cfg.device) > 1: # DP mode
                 print(ANSI.warningstr(f'Will use DP mode on devices {cfg.device}...'))
 
-            for _id in cfg.device:
-                print(f'Using device {_id}:', torch.cuda.get_device_properties(_id), '\n')
+            for i, _id in enumerate(cfg.device):
+                print(f'Using device idx={i}, id={_id}:', torch.cuda.get_device_properties(i), '\n')
             device = torch.device('cuda', 0)
             is_main = True
             distributed = False
         else: # DDP mode
             assert local_rank >= 0
-            msg = f'world size {world_size}, devices {cfg.device}'
+            msg = f'count {torch.cuda.device_count()}, devices {cfg.device} world size {world_size}'
             assert torch.cuda.device_count() == len(cfg.device) == world_size, f'{msg}'
             assert torch.distributed.is_nccl_available()
             torch.distributed.init_process_group(backend="nccl")
