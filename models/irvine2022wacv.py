@@ -26,6 +26,11 @@ class BottleneckResNetLayerWithIGDN(FactorizedPrior):
         self.updated = False
 
     @torch.autocast('cuda', enabled=False)
+    def forward_entropy(self, z):
+        z = z.float()
+        z_hat, z_probs = self.entropy_bottleneck(z)
+        return z_hat, z_probs
+
     def forward(self, x):
         # if not self.training:
         #     encoded_obj = self.encode(x)
@@ -42,7 +47,7 @@ class BottleneckResNetLayerWithIGDN(FactorizedPrior):
         #     return self.decoder(decoder_input)
         x = x.float()
         z = self.encoder(x)
-        z_hat, z_probs = self.entropy_bottleneck(z)
+        z_hat, z_probs = self.forward_entropy(z)
         x_hat = self.decoder(z_hat)
         return x_hat, z_probs
 
