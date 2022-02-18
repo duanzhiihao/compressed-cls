@@ -1,5 +1,6 @@
 # scripts
 _test*
+speedtest.py
 
 # folders
 runs/
