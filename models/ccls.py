@@ -132,6 +132,7 @@ class VCMClassify(nn.Module):
         from mycv.datasets.constants import IMAGENET_MEAN, IMAGENET_STD
         self.input_mean = torch.FloatTensor(IMAGENET_MEAN).view(1, 3, 1, 1)
         self.input_std  = torch.FloatTensor(IMAGENET_STD).view(1, 3, 1, 1)
+        self._flops_mode = False
 
     def forward(self, x: torch.FloatTensor, _return_cache=False):
         assert x.dim() == 4 and (not x.requires_grad)
@@ -149,7 +150,10 @@ class VCMClassify(nn.Module):
                 self.input_std = self.input_std.to(device=x.device)
                 x.sub_(self.input_mean).div_(self.input_std)
 
-        x = self.stage3(x, _return_cache)
+        if self._flops_mode:
+            x = self.stage3(x)
+        else:
+            x = self.stage3(x, _return_cache)
         return x
 
     def forward_nic(self, imgs):
