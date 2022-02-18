@@ -113,8 +113,8 @@ class VCMClassify(nn.Module):
             wpath = MYCV_DIR / 'weights/vgg/vgg11-tv.pth'
             load_partial(self.stage3, wpath, verbose=verbose)
         elif stage3 == 'vgg11':
-            from mycv.models.cls.vgg import VGG11
-            self.stage3 = VGG11(num_classes=num_cls, pretrained=True)
+            from mycv.models.cls.vgg import VGG
+            self.stage3 = VGG(version='vgg11')
             wpath = MYCV_DIR / 'weights/vgg/vgg11-tv.pth'
             load_partial(self.stage3, wpath, verbose=verbose)
         # elif stage3.startswith('csp_'):
