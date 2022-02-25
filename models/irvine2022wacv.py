@@ -65,7 +65,8 @@ class BottleneckVQa(nn.Module):
     def forward_entropy(self, z):
         z = z.float()
         vq_loss, z_quantized = self.codebook.forward_train(z)
-        z_probs = torch.ones_like(z) / float(self.codebook._num_embeddings)
+        nB, nC, nH, nW = z.shape
+        z_probs = torch.ones(nB, nH, nW, device=z.device) / float(self.codebook._num_embeddings)
         # z_hat, z_probs = self.entropy_bottleneck(z)
         return vq_loss, z_quantized, z_probs
 
