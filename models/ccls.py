@@ -75,6 +75,7 @@ class VCMClassify(nn.Module):
         for v in self.stage2.parameters():
             v.requires_grad = False
 
+        self._flops_mode = False
         # if stage3 == 'res50_':
         #     raise DeprecationWarning()
         #     self.stage3 = ResNet_(ch1, [3, 4, 6, 3], num_classes=num_cls, student=student)
@@ -117,6 +118,7 @@ class VCMClassify(nn.Module):
             self.stage3 = VGG(version='vgg11')
             wpath = MYCV_DIR / 'weights/vgg/vgg11-tv.pth'
             load_partial(self.stage3, wpath, verbose=verbose)
+            self._flops_mode = True
         # elif stage3.startswith('csp_'):
         #     self.stage3 = CSP_(model=stage3[-1], in_ch=128, num_class=num_cls)
         elif stage3 == 'vitt-aa':
@@ -132,7 +134,6 @@ class VCMClassify(nn.Module):
         from mycv.datasets.constants import IMAGENET_MEAN, IMAGENET_STD
         self.input_mean = torch.FloatTensor(IMAGENET_MEAN).view(1, 3, 1, 1)
         self.input_std  = torch.FloatTensor(IMAGENET_STD).view(1, 3, 1, 1)
-        self._flops_mode = False
 
     def forward(self, x: torch.FloatTensor, _return_cache=False):
         assert x.dim() == 4 and (not x.requires_grad)
