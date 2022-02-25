@@ -457,7 +457,7 @@ class TrainWrapper():
                     assert yhat.shape == (imgs.shape[0], cfg.num_classes)
                     l_cls = self.loss_func(yhat, labels)
                     if p_z is not None:
-                        bpp = p_z.mean(0).sum() / (imgs.shape[2]*imgs.shape[3])
+                        bpp = -1.0 * torch.log2(p_z).mean(0).sum() / (imgs.shape[2]*imgs.shape[3])
                     else:
                         bpp = torch.zeros(1, device=self.device)
 
