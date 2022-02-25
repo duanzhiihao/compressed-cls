@@ -28,12 +28,12 @@ def get_config():
     parser = argparse.ArgumentParser()
     # wandb setting
     parser.add_argument('--project',    type=str,  default='mobile-cloud')
-    parser.add_argument('--group',      type=str,  default='default')
+    parser.add_argument('--group',      type=str,  default='irvine')
     parser.add_argument('--wbmode',     type=str,  default='disabled')
     # model setting
-    parser.add_argument('--model',      type=str,  default='mobilev3mc')
-    parser.add_argument('--cut_after',  type=str,  default='2')
-    parser.add_argument('--entropy',    type=str,  default='quantize')
+    parser.add_argument('--model',      type=str,  default='irvine-vqa')
+    parser.add_argument('--cut_after',  type=str,  default='')
+    parser.add_argument('--entropy',    type=str,  default='')
     parser.add_argument('--lmbda',      type=float,default=1.0)
     parser.add_argument('--en_only',    action='store_true')
     parser.add_argument('--detach',     type=int,  default=-1)
@@ -203,6 +203,9 @@ class TrainWrapper():
         elif mname == 'irvine':
             from models.irvine2022wacv import BottleneckResNetBackbone
             model = BottleneckResNetBackbone()
+        elif mname == 'irvine-vqa':
+            from models.irvine2022wacv import BottleneckResNetBackbone
+            model = BottleneckResNetBackbone(zdim=64, bottleneck='vqa')
         else:
             raise ValueError()
         if self.is_main:
@@ -450,7 +453,7 @@ class TrainWrapper():
 
                 # forward
                 with amp.autocast(enabled=cfg.amp):
-                    yhat, p_z = model(imgs)
+                    yhat, p_z, vq_loss = model(imgs)
                     assert yhat.shape == (imgs.shape[0], cfg.num_classes)
                     l_cls = self.loss_func(yhat, labels)
                     if p_z is not None:
@@ -471,6 +474,8 @@ class TrainWrapper():
                             l_trs.append(torch.zeros(1, device=self.device))
 
                     loss = l_cls + cfg.lmbda * bpp + sum(l_trs)
+                    if loss is not None:
+                        loss = loss + vq_loss
                     # loss is averaged over batch and gpus
                     loss = loss / float(cfg.accum_num)
                 self.scaler.scale(loss).backward()

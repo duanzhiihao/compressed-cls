@@ -1,3 +1,4 @@
+import math
 import torch
 import torch.nn as nn
 
@@ -32,44 +33,59 @@ class BottleneckResNetLayerWithIGDN(FactorizedPrior):
         return z_hat, z_probs
 
     def forward(self, x):
-        # if not self.training:
-        #     encoded_obj = self.encode(x)
-        #     self.analyze_compressed_object(encoded_obj)
-        #     decoded_obj = self.decode(encoded_obj)
-        #     return decoded_obj
-
-        # # if fine-tuning after "update"
-        # if self.updated:
-        #     encoded_output = self.encoder(x)
-        #     decoder_input =\
-        #         self.entropy_bottleneck.dequantize(self.entropy_bottleneck.quantize(encoded_output, 'dequantize'))
-        #     decoder_input = decoder_input.detach()
-        #     return self.decoder(decoder_input)
         x = x.float()
         z = self.encoder(x)
         z_hat, z_probs = self.forward_entropy(z)
         x_hat = self.decoder(z_hat)
         return x_hat, z_probs
 
-    # def update(self, force=False):
-    #     super().update(force=force)
-    #     self.updated = True
 
-    # def encode(self, x, **kwargs):
-    #     latent = self.encoder(x)
-    #     compressed_latent = self.entropy_bottleneck.compress(latent)
-    #     return compressed_latent, latent.size()[2:]
+class BottleneckVQa(nn.Module):
+    def __init__(self, num_enc_channels=64, num_target_channels=256):
+        super().__init__()
+        self.encoder = nn.Sequential(
+            nn.Conv2d(3, num_enc_channels, kernel_size=5, stride=2, padding=2, bias=False),
+            GDN1(num_enc_channels),
+            nn.Conv2d(num_enc_channels, num_enc_channels, kernel_size=5, stride=2, padding=2, bias=False),
+            GDN1(num_enc_channels),
+            nn.Conv2d(num_enc_channels, num_enc_channels, kernel_size=2, stride=1, padding=0, bias=False)
+        )
+        self.decoder = nn.Sequential(
+            nn.Conv2d(num_enc_channels, num_target_channels * 2, kernel_size=2, stride=1, padding=1, bias=False),
+            GDN1(num_target_channels * 2, inverse=True),
+            nn.Conv2d(num_target_channels * 2, num_target_channels, kernel_size=2, stride=1, padding=0, bias=False),
+            GDN1(num_target_channels, inverse=True),
+            nn.Conv2d(num_target_channels, num_target_channels, kernel_size=2, stride=1, padding=1, bias=False)
+        )
+        self.updated = False
+        from mycv.models.vqvae.myvqvae import MyCodebookEMA
+        self.codebook = MyCodebookEMA(256, embedding_dim=num_enc_channels, commitment_cost=0.25)
 
-    # def decode(self, compressed_obj, **kwargs):
-    #     compressed_latent, latent_shape = compressed_obj
-    #     latent_hat = self.entropy_bottleneck.decompress(compressed_latent, latent_shape)
-    #     return self.decoder(latent_hat)
+    @torch.autocast('cuda', enabled=False)
+    def forward_entropy(self, z):
+        z = z.float()
+        vq_loss, z_quantized = self.codebook.forward_train(z)
+        z_probs = torch.ones_like(z) / float(self.codebook._num_embeddings)
+        # z_hat, z_probs = self.entropy_bottleneck(z)
+        return vq_loss, z_quantized, z_probs
+
+    def forward(self, x):
+        x = x.float()
+        z = self.encoder(x)
+        vq_loss, z_hat, z_probs = self.forward_entropy(z)
+        x_hat = self.decoder(z_hat)
+        return x_hat, z_probs, vq_loss
 
 
 class BottleneckResNetBackbone(MobileCloudBase):
-    def __init__(self, num_classes=1000):
+    def __init__(self, num_classes=1000, zdim=24, bottleneck='factorized'):
         super().__init__()
-        self.bottleneck_layer = BottleneckResNetLayerWithIGDN(24, 256)
+        if bottleneck == 'factorized':
+            self.bottleneck_layer = BottleneckResNetLayerWithIGDN(zdim, 256)
+        elif bottleneck == 'vqa':
+            self.bottleneck_layer = BottleneckVQa(zdim, 256)
+        else:
+            raise ValueError()
 
         from torchvision.models.resnet import resnet50
         # from timm.models.resnet import resnet50
@@ -85,7 +101,7 @@ class BottleneckResNetBackbone(MobileCloudBase):
         self.cache = [None, None, None, None]
 
     def forward(self, x):
-        x, probs = self.bottleneck_layer(x)
+        x, probs, vq_loss = self.bottleneck_layer(x)
         x2 = self.layer2(x)
         x3 = self.layer3(x2)
         x4 = self.layer4(x3)
@@ -94,7 +110,9 @@ class BottleneckResNetBackbone(MobileCloudBase):
         y = self.fc(x)
 
         self.cache = [None, x2, x3, x4]
-        return y, probs
+        if not self.training:
+            return y, probs
+        return y, probs, vq_loss
 
     def forward_entropy(self, z):
         raise NotImplementedError()
