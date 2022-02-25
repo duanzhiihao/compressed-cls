@@ -131,7 +131,8 @@ class MobileCloudBase(nn.Module):
         # update testing stats
         num, bpp, bpd = self.testing_stats
         nB, _, imh, imw = x.shape
-        batch_bpp = compute_bpp(p_z, imh*imw, batch_reduction='sum')
+        batch_bpp = -1.0 * torch.log2(p_z).sum() / (imh*imw)
+        # batch_bpp = compute_bpp(p_z, imh*imw, batch_reduction='sum')
         bpp = (bpp * num + batch_bpp) / (num + nB)
         batch_bpd = - torch.log2(p_z).mean() * nB
         bpd = (bpd * num + batch_bpd) / (num + nB)
