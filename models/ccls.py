@@ -114,10 +114,12 @@ class VCMClassify(nn.Module):
             wpath = MYCV_DIR / 'weights/vgg/vgg11-tv.pth'
             load_partial(self.stage3, wpath, verbose=verbose)
         elif stage3 == 'vgg11':
-            from mycv.models.cls.vgg import VGG
-            self.stage3 = VGG(version='vgg11')
-            wpath = MYCV_DIR / 'weights/vgg/vgg11-tv.pth'
-            load_partial(self.stage3, wpath, verbose=verbose)
+            # from mycv.models.cls.vgg import VGG
+            # self.stage3 = VGG(version='vgg11')
+            # wpath = MYCV_DIR / 'weights/vgg/vgg11-tv.pth'
+            # load_partial(self.stage3, wpath, verbose=verbose)
+            from torchvision.models.vgg import vgg11
+            self.stage3 = vgg11(pretrained=True)
             self._flops_mode = True
         # elif stage3.startswith('csp_'):
         #     self.stage3 = CSP_(model=stage3[-1], in_ch=128, num_class=num_cls)
