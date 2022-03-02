@@ -45,20 +45,24 @@ class BottleneckVQa(nn.Module):
         super().__init__()
         self.encoder = nn.Sequential(
             nn.Conv2d(3, num_enc_channels, kernel_size=5, stride=2, padding=2, bias=False),
-            GDN1(num_enc_channels),
+            # GDN1(num_enc_channels),
+            nn.GELU(),
             nn.Conv2d(num_enc_channels, num_enc_channels, kernel_size=5, stride=2, padding=2, bias=False),
-            GDN1(num_enc_channels),
+            # GDN1(num_enc_channels),
+            nn.GELU(),
             nn.Conv2d(num_enc_channels, num_enc_channels, kernel_size=2, stride=1, padding=0, bias=False)
         )
         self.decoder = nn.Sequential(
             nn.Conv2d(num_enc_channels, num_target_channels * 2, kernel_size=2, stride=1, padding=1, bias=False),
-            GDN1(num_target_channels * 2, inverse=True),
+            nn.GELU(),
+            # GDN1(num_target_channels * 2, inverse=True),
             nn.Conv2d(num_target_channels * 2, num_target_channels, kernel_size=2, stride=1, padding=0, bias=False),
-            GDN1(num_target_channels, inverse=True),
+            nn.GELU(),
+            # GDN1(num_target_channels, inverse=True),
             nn.Conv2d(num_target_channels, num_target_channels, kernel_size=2, stride=1, padding=1, bias=False)
         )
         self.updated = False
-        from mycv.models.vqvae.myvqvae import MyCodebookEMA
+        from mycv.models.vae.vqvae.myvqvae import MyCodebookEMA
         self.codebook = MyCodebookEMA(256, embedding_dim=num_enc_channels, commitment_cost=0.25)
 
     @torch.autocast('cuda', enabled=False)
