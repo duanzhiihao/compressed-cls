@@ -63,14 +63,15 @@ class BottleneckVQa(nn.Module):
         )
         self.updated = False
         from mycv.models.vae.vqvae.myvqvae import MyCodebookEMA
-        self.codebook = MyCodebookEMA(256, embedding_dim=num_enc_channels, commitment_cost=0.25)
+        num_codes = 64
+        self.codebook = MyCodebookEMA(num_codes, embedding_dim=num_enc_channels, commitment_cost=0.25)
 
     @torch.autocast('cuda', enabled=False)
     def forward_entropy(self, z):
         z = z.float()
-        vq_loss, z_quantized = self.codebook.forward_train(z)
+        vq_loss, z_quantized, code_indices = self.codebook.forward(z)
         nB, nC, nH, nW = z.shape
-        z_probs = torch.ones(nB, nH, nW, device=z.device) / float(self.codebook._num_embeddings)
+        z_probs = self.codebook.get_probs(code_indices)
         # z_hat, z_probs = self.entropy_bottleneck(z)
         return vq_loss, z_quantized, z_probs
 
@@ -125,12 +126,3 @@ class BottleneckResNetBackbone(MobileCloudBase):
     # def update(self):
     #     self.bottleneck_layer.update()
     #     self.updated = True
-
-
-def main():
-    
-    debug = 1
-
-
-if __name__ == '__main__':
-    main()
