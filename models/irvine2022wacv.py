@@ -25,6 +25,7 @@ class BottleneckResNetLayerWithIGDN(FactorizedPrior):
             nn.Conv2d(num_target_channels, num_target_channels, kernel_size=2, stride=1, padding=1, bias=False)
         )
         self.updated = False
+        self._flops_mode = False
 
     @torch.autocast('cuda', enabled=False)
     def forward_entropy(self, z):
@@ -36,6 +37,8 @@ class BottleneckResNetLayerWithIGDN(FactorizedPrior):
         x = x.float()
         z = self.encoder(x)
         z_hat, z_probs = self.forward_entropy(z)
+        if self._flops_mode:
+            return 0
         x_hat = self.decoder(z_hat)
         return x_hat, z_probs
 
@@ -61,10 +64,11 @@ class BottleneckVQa(nn.Module):
             # GDN1(num_target_channels, inverse=True),
             nn.Conv2d(num_target_channels, num_target_channels, kernel_size=2, stride=1, padding=1, bias=False)
         )
-        self.updated = False
         from mycv.models.vae.vqvae.myvqvae import MyCodebookEMA
-        num_codes = 64
+        num_codes = 32
         self.codebook = MyCodebookEMA(num_codes, embedding_dim=num_enc_channels, commitment_cost=0.25)
+        self.updated = False
+        self._flops_mode = False
 
     @torch.autocast('cuda', enabled=False)
     def forward_entropy(self, z):
@@ -79,6 +83,8 @@ class BottleneckVQa(nn.Module):
         x = x.float()
         z = self.encoder(x)
         vq_loss, z_hat, z_probs = self.forward_entropy(z)
+        if self._flops_mode:
+            return 0
         x_hat = self.decoder(z_hat)
         return x_hat, z_probs, vq_loss
 
