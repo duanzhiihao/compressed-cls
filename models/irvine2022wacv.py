@@ -80,7 +80,7 @@ class BottleneckVQa(nn.Module):
             nn.Conv2d(num_target_channels, num_target_channels, kernel_size=2, stride=1, padding=1, bias=False)
         )
         from mycv.models.vae.vqvae.myvqvae import MyCodebookEMA
-        num_codes = 16
+        num_codes = 32
         self.codebook = MyCodebookEMA(num_codes, embedding_dim=num_enc_channels, commitment_cost=0.25)
         self.updated = False
         if _flops_mode:
