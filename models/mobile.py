@@ -111,6 +111,7 @@ class MobileCloudBase(nn.Module):
         super().__init__()
         self.testing_stats = (0, 0.0, 0.0) # num, bpp, bits per dim
         self.detach = False
+        self.flops_mode = False
 
     def init_testing(self):
         self.testing_stats = (0, 0.0, 0.0) # num, bpp, bits per dim
