@@ -315,6 +315,9 @@ def train():
 
             scaler.scale(loss).backward()
             if niter % cfg.accum_num == 0:
+                # https://pytorch.org/docs/stable/notes/amp_examples.html#gradient-clipping
+                scaler.unscale_(optimizer)
+                grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0).item()
                 scaler.step(optimizer)
                 scaler.update()
                 optimizer.zero_grad()
@@ -350,6 +353,7 @@ def train():
                     'train/train_loss': train_loss,
                     'train/train_trs': train_trs,
                     'train/train_acc': train_acc,
+                    'train/grad_norm': grad_norm,
                     'ema/n_updates': ema.updates if ema is not None else 0,
                     'ema/decay': ema.get_decay() if ema is not None else 0
                 }, step=niter)
