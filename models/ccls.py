@@ -1,7 +1,9 @@
+import math
 import types
 import torch
 import torch.nn as nn
 import torch.nn.functional as tnf
+import torchvision as tv
 
 from mycv.paths import MYCV_DIR
 from mycv.utils.torch_utils import load_partial, weights_replace
@@ -88,6 +90,8 @@ class VCMClassify(nn.Module):
             self.stage3 = ResNet_aa_spc(ch1, [3, 4, 6, 3], num_classes=num_cls)
             wpath = MYCV_DIR / 'weights/resnet/resnet50-19c8e357.pth'
             load_partial(self.stage3, wpath, verbose=verbose)
+        elif stage3 == 'reshape-res50':
+            self.stage3 = ReshapeResNet50(ch1, num_classes=num_cls)
         elif stage3 == 'cres50':
             self.stage3 = cResNet(ch1, [0, 4, 10, 3], num_classes=num_cls)
             wpath = MYCV_DIR / 'weights/resnet/resnet50-19c8e357.pth'
@@ -168,6 +172,22 @@ class VCMClassify(nn.Module):
         x2 = self.stage2(x1)
         x2 = x2.clamp_(min=0, max=1)
         return x2, None
+
+
+class ReshapeResNet50(nn.Module):
+    def __init__(self, in_ch=192, num_classes=1000):
+        super().__init__()
+        assert num_classes == 1000
+        self.resnet50 = tv.models.resnet50(weights=tv.models.ResNet50_Weights.IMAGENET1K_V1)
+
+    def forward(self, x, _return_cache=False):
+        assert x.shape[1] % 3 == 0
+        factor = round(math.sqrt(x.shape[1] / 3))
+        assert isinstance(factor, int)
+        tnf.pixel_shuffle(x, upscale_factor=factor)
+        assert (x.shape[1] == 3) and (x.shape[2] == x.shape[3])
+        y = self.resnet50(x)
+        return y
 
 
 from mycv.models.cls.resnet import Bottleneck, conv1x1
