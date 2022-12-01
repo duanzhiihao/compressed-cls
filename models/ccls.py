@@ -191,7 +191,7 @@ class ReshapeResNet50(nn.Module):
             patch = torch.zeros(xB, new_ch-in_ch, xH, xW, device=x.device)
             x = torch.cat([x, patch], dim=1)
         else:
-            assert new_ch > in_ch
+            assert new_ch == in_ch
         x = tnf.pixel_shuffle(x, upscale_factor=factor)
         assert (x.shape[1] == 3)
         y = self.resnet50(x)
