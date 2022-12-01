@@ -11,7 +11,7 @@ import torch.cuda.amp as amp
 # from torch.nn.parallel import DistributedDataParallel as DDP
 import wandb
 
-from mycv.paths import MYCV_DIR, IMAGENET_DIR
+from mycv.paths import MYCV_DIR, all_dataset_paths
 from mycv.utils.general import increment_dir
 from mycv.utils.torch_utils import load_partial, set_random_seeds, ModelEMA, reset_model_parameters
 import  mycv.utils.lr_schedulers as lr_schedulers
@@ -98,7 +98,7 @@ def train():
     else:
         raise NotImplementedError()
     # training set
-    trainloader = get_trainloader(root_dir=IMAGENET_DIR/'train',
+    trainloader = get_trainloader(root_dir=all_dataset_paths['imagenet']/'train',
         aug='baseline', img_size=cfg.img_size, input_norm=False,
         batch_size=cfg.batch_size, workers=cfg.workers
     )
