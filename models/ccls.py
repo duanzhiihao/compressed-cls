@@ -181,11 +181,19 @@ class ReshapeResNet50(nn.Module):
         self.resnet50 = tv.models.resnet50(weights=tv.models.ResNet50_Weights.IMAGENET1K_V1)
 
     def forward(self, x, _return_cache=False):
-        assert x.shape[1] % 3 == 0
-        factor = round(math.sqrt(x.shape[1] / 3))
+        in_ch = x.shape[1]
+        factor = math.ceil(math.sqrt(in_ch / 3))
         assert isinstance(factor, int)
-        tnf.pixel_shuffle(x, upscale_factor=factor)
-        assert (x.shape[1] == 3) and (x.shape[2] == x.shape[3])
+        new_ch = 3 * factor**2
+        assert isinstance(new_ch, int)
+        if new_ch > in_ch: # padding
+            xB, _, xH, xW = x.shape
+            patch = torch.zeros(xB, new_ch-in_ch, xH, xW, device=x.device)
+            x = torch.cat([x, patch], dim=1)
+        else:
+            assert new_ch > in_ch
+        x = tnf.pixel_shuffle(x, upscale_factor=factor)
+        assert (x.shape[1] == 3)
         y = self.resnet50(x)
         return y
 
