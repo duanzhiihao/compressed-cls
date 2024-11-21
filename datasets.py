@@ -1,143 +1,271 @@
 from tqdm import tqdm
-import numpy as np
-from PIL import Image
-import cv2
+from collections import defaultdict
+import re
+import random
 import torch
 import torchvision as tv
+import torchvision.transforms.functional as tvf
+from timm.utils import AverageMeter
 
-from jpeg2dct.numpy import load, loads
-
-
-class DCTtrain(tv.datasets.ImageFolder):
-    def __getitem__(self, index: int):
-        path, target = self.samples[index]
-        sample = self.loader(path)
-
-        if self.transform is not None:
-            x_y, x_cb, x_cr = self.transform(sample)
-        assert self.target_transform is None
-
-        return x_y, x_cb, x_cr, target
+IMAGENET_MEAN = (0.485, 0.456, 0.406)
+IMAGENET_STD = (0.229, 0.224, 0.225)
 
 
-class DCTtest(tv.datasets.ImageFolder):
-    def __getitem__(self, index: int):
-        path, target = self.samples[index]
+def parse_config_str(config_str: str):
+    """
 
-        assert self.transform is None
-        x_y, x_cb, x_cr = load(path)
-        x_y, x_cb, x_cr = [torch.from_numpy(f).float().permute(2,0,1) \
-                           for f in [x_y, x_cb, x_cr]]
-        assert self.target_transform is None
+    Args:
+        config_str (str): [description]
 
-        return x_y, x_cb, x_cr, target
+    ### Examples:
+        >>> input_1: 'rand-re0.25'
+        >>> output_1: {'rand': True, 're': 0.25}
 
-
-class ToJPEGbits():
-    def __init__(self) -> None:
-        pass
-
-    def __call__(self, img):
-        assert isinstance(img, Image.Image)
-        im = np.array(img)[:,:,::-1] # BGR image
-        flag, bits = cv2.imencode('.jpg', im, params=[cv2.IMWRITE_JPEG_QUALITY, 100])
-        assert flag
-        bits = bits.tobytes()
-        return bits
-
-
-class DecodeDCT():
-    def __init__(self) -> None:
-        pass
-
-    def __call__(self, bits):
-        y, cb, cr = loads(bits)
-        y, cb, cr = [torch.from_numpy(f).float().permute(2,0,1) for f in [y, cb, cr]]
-        return [y, cb, cr]
+        >>> input_2: 'baseline'
+        >>> output_2: {'baseline': True}
+    """
+    configs = dict()
+    for kv_pair in config_str.split('-'):
+        result = re.split(r'(\d.*)', kv_pair)
+        if len(result) == 1:
+            k = result[0]
+            configs[k] = True
+        else:
+            assert len(result) == 3 and result[2] == ''
+            k, v, _ = re.split(r'(\d.*)', kv_pair)
+            configs[k] = float(v)
+    return configs
 
 
-def jpeg_dct_trainloader(root_dir, img_size: int, batch_size: int, workers: int):
-    transform = tv.transforms.Compose([
-        tv.transforms.RandomResizedCrop(img_size),
-        tv.transforms.RandomHorizontalFlip(),
-        ToJPEGbits(),
-        DecodeDCT()
-    ])
+def get_tv_interpolation(name='bilinear'):
+    """ get interpolation for torchvision
 
-    trainset = DCTtrain(root=root_dir, transform=transform)
+    Args:
+        name (str, optional): 'bilinear' or 'bicubic'
+    """
+    if name == 'bilinear':
+        # if float(tv.__version__[:-2]) < 0.10:
+        #     interp = Image.BILINEAR
+        #     print(f'Warning: torchvision version: {tv.__version__} do not support InterpolationMode.',
+        #         'Using PIL.Image int instead...')
+        interp = tv.transforms.InterpolationMode.BILINEAR
+    elif name == 'bicubic':
+        # if float(tv.__version__[:-2]) < 0.10:
+        #     interp = Image.BICUBIC
+        #     print(f'Warning: torchvision version: {tv.__version__} do not support InterpolationMode.',
+        #         'Using PIL.Image int instead...')
+        interp = tv.transforms.InterpolationMode.BICUBIC
+    else:
+        raise NotImplementedError()
+    return interp
+
+
+class IdentityTransform():
+    def __call__(self, x):
+        return x
+
+
+class RandomInterpolation():
+    value = ('bilinear', 'bicubic')
+
+
+class RandomResizedCropInterp(tv.transforms.RandomResizedCrop):
+    def __init__(self, size, scale=(0.08, 1.0), ratio=(3. / 4., 4. / 3.)):
+        super().__init__(size, scale=scale, ratio=ratio, interpolation=None)
+        self.interpolation = RandomInterpolation()
+
+    def forward(self, img):
+        interp = random.choice(self.interpolation.value)
+        interp = get_tv_interpolation(interp)
+        i, j, h, w = self.get_params(img, self.scale, self.ratio)
+        return tvf.resized_crop(img, i, j, h, w, self.size, interp)
+
+
+def get_input_normalization(name: str):
+    """ get tv.transforms.Normalize according to the name
+
+    Args:
+        name (str): 'imagenet', 'inception'
+    """
+    if name == 'imagenet':
+        norm = tv.transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD)
+    elif name == 'inception':
+        norm = tv.transforms.Normalize(mean=(0.5,0.5,0.5), std=(0.5,0.5,0.5))
+    elif not name:
+        norm = IdentityTransform()
+    else:
+        raise ValueError(f'Unknown input_norm: {name}')
+    return norm
+
+
+def get_transform(tf_str: str, img_size: int, input_norm):
+    """ Get transform given a config string
+
+    Args:
+        tf_str (str): transform congif string
+        img_size (int): input image size
+        input_norm ([type]): input normalization type
+    """
+    aug_dict = parse_config_str(tf_str)
+
+    if aug_dict.pop('finetune', False):
+        transform = [
+            tv.transforms.RandomResizedCrop(img_size, scale=(0.64, 1)),
+            tv.transforms.RandomHorizontalFlip(),
+        ]
+    else:
+        transform = [
+            # tv.transforms.RandomResizedCrop(img_size),
+            RandomResizedCropInterp(img_size),
+            tv.transforms.RandomHorizontalFlip(),
+        ]
+
+    if aug_dict.pop('baseline', False):
+        transform.append(tv.transforms.ToTensor())
+
+    if aug_dict.pop('rand', False):
+        # from timm.data.transforms import RandomResizedCropAndInterpolation
+        from timm.data.random_erasing import RandomErasing
+        from timm.data.auto_augment import rand_augment_transform
+
+        assert input_norm == 'imagenet', f'input_norm required to be imagenet but get {input_norm}'
+        if aug_dict.pop('inc', False):
+            ra_str = 'rand-m9-mstd0.5-inc1'
+        else:
+            ra_str = 'rand-m9-mstd0.5'
+        reprob = aug_dict.pop('re', 0.5)
+        transform = [
+            # RandomResizedCropAndInterpolation(img_size, interpolation='random'),
+            RandomResizedCropInterp(img_size),
+            tv.transforms.RandomHorizontalFlip(),
+            rand_augment_transform(
+                config_str=ra_str,
+                hparams={'translate_const': int(img_size*0.45),
+                         'img_mean': tuple([round(255 * x) for x in IMAGENET_MEAN])}
+            ),
+            tv.transforms.ToTensor(),
+            RandomErasing(reprob, mode='pixel', max_count=1, device='cpu')
+        ]
+        assert len(aug_dict) == 0
+
+    if aug_dict.pop('trivial', False):
+        from torchvision.transforms.autoaugment import TrivialAugmentWide
+        transform.extend([
+            TrivialAugmentWide(interpolation=get_tv_interpolation('bilinear')),
+            tv.transforms.PILToTensor(),
+            tv.transforms.ConvertImageDtype(torch.float)
+        ])
+
+    if input_norm:
+        norm = get_input_normalization(input_norm)
+        transform.append(norm)
+
+    reprob = aug_dict.pop('re', 0)
+    if reprob > 0:
+        transform.append(tv.transforms.RandomErasing(p=reprob))
+
+    if len(aug_dict) != 0:
+        raise ValueError(f'Unknown transform augmentation str: {tf_str}')
+
+    transform = tv.transforms.Compose(transform)
+    return transform
+
+
+def get_trainloader(root_dir, aug: str, img_size: int, input_norm: str,
+                    batch_size: int, workers: int, distributed=False):
+    """ get training data loader
+
+    Args:
+        root_dir ([type]): [description]
+        aug (str): transform congif string
+        img_size (int): input image size
+        input_norm ([type]): input normalization type
+        batch_size (int): [description]
+        workers (int): [description]
+    """
+    transform = get_transform(aug, img_size, input_norm)
+
+    trainset = tv.datasets.ImageFolder(root=root_dir, transform=transform)
+    sampler = torch.utils.data.distributed.DistributedSampler(trainset) if distributed else None
     trainloader = torch.utils.data.DataLoader(
-        trainset, batch_size=batch_size, shuffle=True, num_workers=workers,
-        pin_memory=True, drop_last=False
+        trainset, batch_size=batch_size, shuffle=(sampler is None), num_workers=workers,
+        pin_memory=True, drop_last=False, sampler=sampler
     )
     return trainloader
-
-
-def jpeg_dct_valloader(root_dir, batch_size: int, workers: int):
-    trainset = DCTtest(root=root_dir)
-    trainloader = torch.utils.data.DataLoader(
-        trainset, batch_size=batch_size, shuffle=True, num_workers=workers,
-        pin_memory=True, drop_last=False
-    )
-    return trainloader
-
 
 
 @torch.no_grad()
-def imcls_dct_evaluate(model: torch.nn.Module, testloader):
-    model.eval()
+def imcls_evaluate(model: torch.nn.Module, testloader):
+    """ Image classification evaluation with a testloader.
+
+    Args:
+        model (torch.nn.Module): pytorch model
+        testloader (torch.utils.data.Dataloader): test dataloader
+    """
     device = next(model.parameters()).device
-    forward_ = getattr(model, 'forward_cls', model.forward)
+    dtype = next(model.parameters()).dtype
     nC = len(testloader.dataset.classes)
 
-    tp1_sum, tp5_sum, total_num = 0, 0, 0
+    # tp1_sum, tp5_sum, total_num = 0, 0, 0
+    stats_avg_meter = defaultdict(AverageMeter)
+    print(f'Evaluating {type(model)}, device={device}, dtype={dtype}')
+    print(f'batch_size={testloader.batch_size}, num_workers={testloader.num_workers}')
     pbar = tqdm(testloader)
-    for x_y, x_cb, x_cr, labels in pbar:
+    for imgs, labels in pbar:
         # sanity check
-        x_y: torch.FloatTensor
-        assert (x_y.dim() == 4), f'x_y shape {x_y.shape}'
-        nB = x_y.shape[0]
+        imgs: torch.FloatTensor
+        assert (imgs.dim() == 4)
+        nB = imgs.shape[0]
         labels: torch.LongTensor
         assert (labels.shape == (nB,)) and (labels.dtype == torch.int64)
         assert 0 <= labels.min() and labels.max() <= nC-1
 
         # forward pass, get prediction
-        x_y, x_cb, x_cr = x_y.to(device=device), x_cb.to(device=device), x_cr.to(device=device)
-        p = forward_(x_y, x_cb, x_cr)
+        # _debug(imgs)
+        imgs = imgs.to(device=device, dtype=dtype)
+        # if hasattr(model, 'self_evaluate'):
+        #     labels = labels.to(device=device)
+        #     stats = model.self_evaluate(imgs, labels) # workaround
+        # else:
+        forward_ = getattr(model, 'forward_cls', model.forward)
+        p = forward_(imgs)
         # reduce to top5
         _, top5_idx = torch.topk(p, k=5, dim=1, largest=True)
         # compute top1 and top5 matches (true positives)
         correct5 = torch.eq(labels.view(nB, 1), top5_idx.cpu())
-        _tp1 = correct5[:, 0].sum().item()
-        _tp5 = correct5.any(dim=1).sum().item()
-        tp1_sum += _tp1
-        tp5_sum += _tp5
+        stats = {
+            'top1': correct5[:, 0].float().mean().item(),
+            'top5': correct5.any(dim=1).float().mean().item()
+        }
+
+        for k, v in stats.items():
+            stats_avg_meter[k].update(float(v), n=nB)
 
         # logging
-        total_num += nB
-        msg = f'top1: {tp1_sum/total_num:.4g}, top5: {tp5_sum/total_num:.4g}'
+        msg = ''.join([f'{k}={v.avg:.4g}, ' for k,v in stats_avg_meter.items()])
         pbar.set_description(msg)
+    pbar.close()
 
     # compute total statistics and return
-    assert total_num == len(testloader.dataset)
-    acc_top1 = tp1_sum / total_num
-    acc_top5 = tp5_sum / total_num
-    results = {'top1': acc_top1, 'top5': acc_top5}
+    _random_key = list(stats_avg_meter.keys())[0]
+    assert stats_avg_meter[_random_key].count == len(testloader.dataset)
+    results = {k: v.avg for k,v in stats_avg_meter.items()}
     return results
+
+def _debug(imgs):    
+    import matplotlib.pyplot as plt
+    input_mean = torch.FloatTensor(IMAGENET_MEAN).view(3, 1, 1)
+    input_std  = torch.FloatTensor(IMAGENET_STD).view(3, 1, 1)
+    im = imgs[0] * input_std + input_mean
+    im = im.permute(1,2,0).numpy()
+    plt.imshow(im); plt.show()
+
+
+def main():
+    transform = RandomResizedCropInterp(224)
+    debug = 1
 
 
 if __name__ == '__main__':
-    from mycv.paths import IMAGENET_DIR
-    from models.dct import ResNetDRFA
-    model = ResNetDRFA()
-    model = model.cuda()
-    model.eval()
+    main()
 
-    # valloader = jpeg_dct_valloader(IMAGENET_DIR/'val224l_jpeg24', batch_size=64, workers=4)
-    # results = imcls_dct_evaluate(model, valloader)
-    # print(results)
-
-    from tqdm import tqdm
-    trainloader = jpeg_dct_trainloader(IMAGENET_DIR/'train_jpeg24',
-        img_size=224, batch_size=256, workers=16)
-    for x_y, x_cb, x_cr, y in tqdm(trainloader):
-        debug = 1
