@@ -228,7 +228,7 @@ def train():
         time.sleep(0.1)
         train_cls, train_trs, train_loss, train_acc = [0.0] * 4
         print('\n' + pbar_title) # title
-        pbar = tqdm(enumerate(trainloader), total=len(trainloader))
+        pbar = tqdm(enumerate(trainloader), total=len(trainloader), ascii=True)
         for i, (imgs, labels) in pbar:
             niter = epoch * len(trainloader) + i
             # debugging
