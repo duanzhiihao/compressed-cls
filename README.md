@@ -29,12 +29,12 @@ Commands are shown for single-GPU training.
 
 Without teacher model:
 ```bash
-train.py --s1 cheng5 --s3 res50-aa --workers 8 --epochs 16 --fixseed --wbmode online
+python train.py --s1 cheng5 --s3 res50-aa --batch_size 128 --equiv_bs 256 --workers 8 --epochs 16 --fixseed --wbmode online
 ```
 
 With teacher model:
 ```bash
-train.py --s1 cheng5 --s3 res50-aa --guide l2 --workers 8 --epochs 16 --fixseed --wbmode online
+python train.py --s1 cheng5 --s3 res50-aa --guide l2 --batch_size 128 --equiv_bs 256 --workers 8 --epochs 16 --fixseed --wbmode online
 ```
 
 

@@ -93,7 +93,7 @@ def train():
     # test set
     testloader = get_valloader(split='val',
         img_size=224, crop_ratio=1, interp='bicubic', input_norm=False,
-        cache=True, batch_size=cfg.batch_size//4, workers=cfg.workers//2
+        batch_size=cfg.batch_size//4, workers=cfg.workers//2
     )
 
     # Initialize model
@@ -147,7 +147,8 @@ def train():
         raise NotImplementedError()
     del parameters
     # AMP
-    scaler = amp.GradScaler(enabled=not cfg.s1.startswith('cheng'))
+    amp_enabled = False
+    scaler = amp.GradScaler(enabled=amp_enabled) # disabled by default
 
     log_parent = Path(f'runs/{cfg.project}')
     if cfg.resume:
@@ -241,7 +242,7 @@ def train():
             nB, nC, nH, nW = imgs.shape
 
             # classification loss
-            with amp.autocast(enabled=not cfg.s1.startswith('cheng')):
+            with amp.autocast("cuda", enabled=amp_enabled):
                 if cfg.guide:
                     # student
                     p_logits, x1, x2, x3, x4 = model(imgs, _return_cache=True)
