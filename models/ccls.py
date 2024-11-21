@@ -55,8 +55,8 @@ class VCMClassify(nn.Module):
         if stage3 == 'res50-aa':
             self.stage3 = ResNet_aa(ch1, [3, 4, 6, 3], num_classes=num_cls)
             from models.resnet import model_urls
-            msd = torch.load(model_urls['resnet50'], weights_only=True)
-            load_partial(self.stage3, msd, verbose=verbose)
+            msd = torch.hub.load_state_dict_from_url(model_urls['resnet50'], weights_only=True)
+            load_partial(self.stage3, msd)
         elif stage3 == 'res50':
             from models.resnet import resnet50
             self.stage3 = resnet50(num_classes=num_cls, pretrained=True)
