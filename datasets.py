@@ -1,14 +1,27 @@
 from tqdm import tqdm
+from pathlib import Path
 from collections import defaultdict
 import re
 import random
 import torch
+import torch.utils.data
 import torchvision as tv
+import torchvision.transforms as tvt
 import torchvision.transforms.functional as tvf
 from timm.utils import AverageMeter
 
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
+
+# The root directory of all datasets
+DATASETS_ROOT = Path('~/datasets').expanduser().resolve()
+
+dataset_paths = {
+    # ImageNet: http://www.image-net.org
+    'imagenet':       DATASETS_ROOT / 'imagenet',
+    'imagenet-train': DATASETS_ROOT / 'imagenet/train',
+    'imagenet-val':   DATASETS_ROOT / 'imagenet/val',
+}
 
 
 def parse_config_str(config_str: str):
@@ -48,13 +61,13 @@ def get_tv_interpolation(name='bilinear'):
         #     interp = Image.BILINEAR
         #     print(f'Warning: torchvision version: {tv.__version__} do not support InterpolationMode.',
         #         'Using PIL.Image int instead...')
-        interp = tv.transforms.InterpolationMode.BILINEAR
+        interp = tvt.InterpolationMode.BILINEAR
     elif name == 'bicubic':
         # if float(tv.__version__[:-2]) < 0.10:
         #     interp = Image.BICUBIC
         #     print(f'Warning: torchvision version: {tv.__version__} do not support InterpolationMode.',
         #         'Using PIL.Image int instead...')
-        interp = tv.transforms.InterpolationMode.BICUBIC
+        interp = tvt.InterpolationMode.BICUBIC
     else:
         raise NotImplementedError()
     return interp
@@ -69,7 +82,7 @@ class RandomInterpolation():
     value = ('bilinear', 'bicubic')
 
 
-class RandomResizedCropInterp(tv.transforms.RandomResizedCrop):
+class RandomResizedCropInterp(tvt.RandomResizedCrop):
     def __init__(self, size, scale=(0.08, 1.0), ratio=(3. / 4., 4. / 3.)):
         super().__init__(size, scale=scale, ratio=ratio, interpolation=None)
         self.interpolation = RandomInterpolation()
@@ -82,15 +95,15 @@ class RandomResizedCropInterp(tv.transforms.RandomResizedCrop):
 
 
 def get_input_normalization(name: str):
-    """ get tv.transforms.Normalize according to the name
+    """ get tvt.Normalize according to the name
 
     Args:
         name (str): 'imagenet', 'inception'
     """
     if name == 'imagenet':
-        norm = tv.transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD)
+        norm = tvt.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD)
     elif name == 'inception':
-        norm = tv.transforms.Normalize(mean=(0.5,0.5,0.5), std=(0.5,0.5,0.5))
+        norm = tvt.Normalize(mean=(0.5,0.5,0.5), std=(0.5,0.5,0.5))
     elif not name:
         norm = IdentityTransform()
     else:
@@ -110,18 +123,18 @@ def get_transform(tf_str: str, img_size: int, input_norm):
 
     if aug_dict.pop('finetune', False):
         transform = [
-            tv.transforms.RandomResizedCrop(img_size, scale=(0.64, 1)),
-            tv.transforms.RandomHorizontalFlip(),
+            tvt.RandomResizedCrop(img_size, scale=(0.64, 1)),
+            tvt.RandomHorizontalFlip(),
         ]
     else:
         transform = [
-            # tv.transforms.RandomResizedCrop(img_size),
+            # tvt.RandomResizedCrop(img_size),
             RandomResizedCropInterp(img_size),
-            tv.transforms.RandomHorizontalFlip(),
+            tvt.RandomHorizontalFlip(),
         ]
 
     if aug_dict.pop('baseline', False):
-        transform.append(tv.transforms.ToTensor())
+        transform.append(tvt.ToTensor())
 
     if aug_dict.pop('rand', False):
         # from timm.data.transforms import RandomResizedCropAndInterpolation
@@ -137,13 +150,13 @@ def get_transform(tf_str: str, img_size: int, input_norm):
         transform = [
             # RandomResizedCropAndInterpolation(img_size, interpolation='random'),
             RandomResizedCropInterp(img_size),
-            tv.transforms.RandomHorizontalFlip(),
+            tvt.RandomHorizontalFlip(),
             rand_augment_transform(
                 config_str=ra_str,
                 hparams={'translate_const': int(img_size*0.45),
                          'img_mean': tuple([round(255 * x) for x in IMAGENET_MEAN])}
             ),
-            tv.transforms.ToTensor(),
+            tvt.ToTensor(),
             RandomErasing(reprob, mode='pixel', max_count=1, device='cpu')
         ]
         assert len(aug_dict) == 0
@@ -152,8 +165,8 @@ def get_transform(tf_str: str, img_size: int, input_norm):
         from torchvision.transforms.autoaugment import TrivialAugmentWide
         transform.extend([
             TrivialAugmentWide(interpolation=get_tv_interpolation('bilinear')),
-            tv.transforms.PILToTensor(),
-            tv.transforms.ConvertImageDtype(torch.float)
+            tvt.PILToTensor(),
+            tvt.ConvertImageDtype(torch.float)
         ])
 
     if input_norm:
@@ -162,12 +175,12 @@ def get_transform(tf_str: str, img_size: int, input_norm):
 
     reprob = aug_dict.pop('re', 0)
     if reprob > 0:
-        transform.append(tv.transforms.RandomErasing(p=reprob))
+        transform.append(tvt.RandomErasing(p=reprob))
 
     if len(aug_dict) != 0:
         raise ValueError(f'Unknown transform augmentation str: {tf_str}')
 
-    transform = tv.transforms.Compose(transform)
+    transform = tvt.Compose(transform)
     return transform
 
 
@@ -192,6 +205,28 @@ def get_trainloader(root_dir, aug: str, img_size: int, input_norm: str,
         pin_memory=True, drop_last=False, sampler=sampler
     )
     return trainloader
+
+
+def get_valloader(split='val',
+        img_size=224, crop_ratio=0.875, interp='bilinear', input_norm='imagenet',
+        batch_size=1, workers=0
+    ):
+    _original = dataset_paths['imagenet'] / split
+    root_dir = _original
+
+    transform = tvt.Compose([
+        tvt.Resize(round(img_size/crop_ratio), interpolation=get_tv_interpolation(interp)),
+        tvt.CenterCrop(img_size),
+        tvt.ToTensor(),
+        get_input_normalization(input_norm)
+    ])
+
+    dataset = tv.datasets.ImageFolder(root=root_dir, transform=transform)
+    dataloader = torch.utils.data.DataLoader(
+        dataset, batch_size=batch_size, shuffle=False, num_workers=workers,
+        pin_memory=True, drop_last=False
+    )
+    return dataloader
 
 
 @torch.no_grad()
@@ -251,21 +286,3 @@ def imcls_evaluate(model: torch.nn.Module, testloader):
     assert stats_avg_meter[_random_key].count == len(testloader.dataset)
     results = {k: v.avg for k,v in stats_avg_meter.items()}
     return results
-
-def _debug(imgs):    
-    import matplotlib.pyplot as plt
-    input_mean = torch.FloatTensor(IMAGENET_MEAN).view(3, 1, 1)
-    input_std  = torch.FloatTensor(IMAGENET_STD).view(3, 1, 1)
-    im = imgs[0] * input_std + input_mean
-    im = im.permute(1,2,0).numpy()
-    plt.imshow(im); plt.show()
-
-
-def main():
-    transform = RandomResizedCropInterp(224)
-    debug = 1
-
-
-if __name__ == '__main__':
-    main()
-
