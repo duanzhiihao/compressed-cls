@@ -8,7 +8,7 @@ import time
 from tqdm import tqdm
 import torch
 import torch.nn.functional as tnf
-import torch.cuda.amp as amp
+import torch.amp as amp
 import wandb
 from timm.utils import ModelEmaV3, random_seed
 
@@ -38,7 +38,7 @@ def train():
     # parser.add_argument('--amp',        action='store_true')
     parser.add_argument('--ema',        type=bool, default=False)
     parser.add_argument('--optimizer',  type=str,  default='sgd', choices=['adamw', 'sgd'])
-    parser.add_argument('--epochs',     type=int,  default=40)
+    parser.add_argument('--epochs',     type=int,  default=16)
     parser.add_argument('--metric',     type=str,  default='top1')
     parser.add_argument('--device',     type=int,  default=[0], nargs='+')
     parser.add_argument('--workers',    type=int,  default=0)
@@ -281,7 +281,6 @@ def train():
                     l_x1, l_x2, l_x3, l_x4 = l_trs
                     lmb1, lmb2, lmb3, lmb4 = cfg.lambdas
                     l_trs = lmb1*l_x1 + lmb2*l_x2 + lmb3*l_x3 + lmb4*l_x4 + l_kd
-                    # l_trs = l_trs #* nB
                 else:
                     l_x1, l_x2, l_x3, l_x4, l_kd, l_trs = torch.zeros(6 , device=device)
                 loss = l_cls + l_trs
@@ -296,14 +295,8 @@ def train():
                 scaler.update()
                 optimizer.zero_grad()
 
-            # if cfg.guide:
-            #     model.stage3.cache = []
-            #     tgtmodel.cache = []
-
             if ema:
                 ema.update(model)
-            # Scheduler
-            # scheduler.step()
 
             # logging
             cur_lr = optimizer.param_groups[0]['lr']
