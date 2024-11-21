@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as tnf
 
+from compressai.zoo import cheng2020_anchor
+
 from models.resnet import Bottleneck, conv1x1
 from my_utils import load_partial
 from datasets import IMAGENET_MEAN, IMAGENET_STD
@@ -23,7 +25,6 @@ class VCMClassify(nn.Module):
             else:
                 raise ValueError()
 
-            from models.compressai_zoo import cheng2020_anchor
             q = int(stage1[-1])
             _model = cheng2020_anchor(q, metric="mse", pretrained=True)
             self.stage1 = _model.g_a
@@ -39,7 +40,6 @@ class VCMClassify(nn.Module):
 
         self.need_center = False
         if stage2.startswith('cheng'):
-            from models.compressai_zoo import cheng2020_anchor
             q = int(stage2[-1])
             _model = cheng2020_anchor(q, metric="mse", pretrained=True)
             self.stage2 = _model.g_s

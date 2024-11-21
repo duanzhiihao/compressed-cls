@@ -83,14 +83,6 @@ def train():
         val_split = 'val'
         cfg.num_class = 1000
         eval_interval = 1
-    elif cfg.group == 'mini200':
-        raise DeprecationWarning()
-        train_split = 'train200_600'
-        val_split = 'val200_600'
-        cfg.num_class = 200
-        assert 'res' in cfg.s3
-        teacher_weights = torch.load(MYCV_DIR / 'weights/res50_imgnet200.pt')['model']
-        eval_interval = 2
     else:
         raise NotImplementedError()
     # training set
@@ -206,7 +198,7 @@ def train():
     # Exponential moving average
     if cfg.ema:
         raise NotImplementedError() # accumulate
-        ema = ModelEMA(model, decay=cfg.ema_decay)
+        ema = ModelEmaV3(model, decay=cfg.ema_decay)
         ema.updates = start_epoch * len(trainloader)  # set EMA updates
         ema.warmup = cfg.ema_warmup_epochs * len(trainloader) # 4 epochs
         # cfg.ema_start_updates = ema.updates
