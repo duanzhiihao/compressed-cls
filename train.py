@@ -1,5 +1,6 @@
-from mycv.utils.general import disable_multithreads
-disable_multithreads()
+import my_utils as mu
+mu.disable_multithreads()
+
 import os
 from pathlib import Path
 import argparse
@@ -8,16 +9,11 @@ from tqdm import tqdm
 import torch
 import torch.nn.functional as tnf
 import torch.cuda.amp as amp
-# from torch.nn.parallel import DistributedDataParallel as DDP
 import wandb
+from timm.utils import ModelEmaV3, random_seed
 
-from mycv.paths import MYCV_DIR, all_dataset_paths
-from mycv.utils.general import increment_dir
-from mycv.utils.torch_utils import load_partial, set_random_seeds, ModelEMA, reset_model_parameters
-import  mycv.utils.lr_schedulers as lr_schedulers
-from mycv.datasets.imcls import get_trainloader, imcls_evaluate
-from mycv.datasets.imagenet import get_valloader
-from mycv.datasets.constants import IMAGENET_MEAN, IMAGENET_STD
+from datasets import get_trainloader, imcls_evaluate, get_valloader, \
+    IMAGENET_MEAN, IMAGENET_STD, dataset_paths
 from models.ccls import VCMClassify
 
 
@@ -26,10 +22,10 @@ def train():
     parser = argparse.ArgumentParser()
     parser.add_argument('--project',    type=str,  default='vcm')
     parser.add_argument('--group',      type=str,  default='imagenet')
-    parser.add_argument('--s1',         type=str,  default='nlaic_ms64')
+    parser.add_argument('--s1',         type=str,  default='cheng3')
     parser.add_argument('--s2',         type=str,  default='')
     parser.add_argument('--s3',         type=str,  default='aavgg16')
-    parser.add_argument('--guide',      type=str,  default=False)
+    parser.add_argument('--guide',      type=str,  default="l2")
     parser.add_argument('--lambdas',    type=float,default=[1,1,1,1], nargs='+')
     parser.add_argument('--kdloss',     action='store_true')
     parser.add_argument('--lr',         type=float,default=0.01)
@@ -63,11 +59,11 @@ def train():
     cfg.ema_warmup_epochs = 4
 
     # check arguments
-    metric:     str = cfg.metric.lower()
-    epochs:     int = cfg.epochs
+    metric = cfg.metric.lower()
+    epochs = cfg.epochs
     print(cfg, '\n')
     if cfg.fixseed: # fix random seeds for reproducibility
-        set_random_seeds(1)
+        random_seed(1)
     torch.backends.cudnn.benchmark = True
     # device setting
     assert torch.cuda.is_available()
@@ -98,7 +94,7 @@ def train():
     else:
         raise NotImplementedError()
     # training set
-    trainloader = get_trainloader(root_dir=all_dataset_paths['imagenet']/'train',
+    trainloader = get_trainloader(root_dir=dataset_paths['imagenet']/'train',
         aug='baseline', img_size=cfg.img_size, input_norm=False,
         batch_size=cfg.batch_size, workers=cfg.workers
     )
@@ -111,23 +107,11 @@ def train():
     # Initialize model
     if cfg.guide:
         if 'res' in cfg.s3:
-            print('Using target model resnet-50...')
-            from mycv.models.cls.resnet import resnet50
-            tgtmodel = resnet50(num_classes=cfg.num_class)
-            weights = torch.load(MYCV_DIR / 'weights/resnet/resnet50-19c8e357.pth')
-            tgtmodel.load_state_dict(weights)
-        elif 'b0' in cfg.s3:
-            print('Using target model efficientnet-b0...')
-            from mycv.external.timm.efficientnet import EfficientNetWrapper
-            tgtmodel = EfficientNetWrapper()
-            wpath = MYCV_DIR / 'weights/efficientnet/efb0_7.pt'
-            load_partial(tgtmodel, wpath, verbose=True)
-        elif 'vgg11' in cfg.s3:
-            print('Using target model VGG11...')
-            from models.ccls import VGG11Teacher
-            tgtmodel = VGG11Teacher()
+            print('Using teacher model resnet-50...')
+            from models.resnet import resnet50
+            tgtmodel = resnet50(num_classes=cfg.num_class, pretrained=True)
         else:
-            raise ValueError()
+            raise ValueError('Unknown teacher model')
 
         tgtmodel = tgtmodel.to(device=device)
         # tgtmodel.eval()
@@ -137,8 +121,6 @@ def train():
             dist_loss = torch.nn.L1Loss(reduction='mean')
         elif cfg.guide == 'l2':
             dist_loss = torch.nn.MSELoss(reduction='mean')
-        elif cfg.guide == 'cos':
-            dist_loss = torch.nn.CosineSimilarity(dim=1)
         elif cfg.guide == 'sl1':
             dist_loss = torch.nn.SmoothL1Loss(beta=0.1, reduction='mean')
         else:
@@ -157,7 +139,7 @@ def train():
     )
 
     if cfg.nopretrain:
-        reset_model_parameters(model.stage3, verbose=True)
+        mu.reset_model_parameters(model.stage3, verbose=True)
     model = model.to(device)
 
     # different optimization setting for different layers
@@ -192,8 +174,8 @@ def train():
         wb_id = open(log_dir / 'wandb_id.txt', 'r').read().strip()
     else:
         # new experiment
-        run_name = increment_dir(dir_root=log_parent,
-                    name=f'{cfg.s1}_{cfg.s2}_{cfg.s3}_{cfg.guide}')
+        run_name = mu.increment_dir(dir_root=log_parent,
+                                    name=f'{cfg.s1}_{cfg.s2}_{cfg.s3}_{cfg.guide}')
         log_dir = log_parent / run_name # wandb logging dir
         os.makedirs(log_dir, exist_ok=False)
         print(str(model), file=open(log_dir / 'model.txt', 'w'))
@@ -206,7 +188,7 @@ def train():
             print(f'\nUsing pre-trained weights from {cfg.load}...')
             checkpoint = torch.load(log_parent / cfg.load / 'last.pt', map_location=device)
             # model.stage3.load_state_dict(checkpoint['model'])
-            load_partial(model.stage3, checkpoint)
+            mu.load_partial(model.stage3, checkpoint)
             if cfg.loadoptim:
                 optimizer.load_state_dict(checkpoint['optimizer'])
                 scaler.load_state_dict(checkpoint['scaler'])
@@ -244,7 +226,7 @@ def train():
     )
     for epoch in range(start_epoch, epochs):
         if cfg.nopretrain:
-            lr_schedulers.adjust_lr_threestep(optimizer, epoch, cfg.lr, epochs)
+            mu.adjust_lr_threestep(optimizer, epoch, cfg.lr, epochs)
         else:
             adjust_learning_rate(optimizer, epoch, cfg.lr, epochs)
         model.train()
