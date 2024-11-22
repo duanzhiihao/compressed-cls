@@ -211,8 +211,7 @@ def get_valloader(split='val',
         img_size=224, crop_ratio=0.875, interp='bilinear', input_norm='imagenet',
         batch_size=1, workers=0
     ):
-    _original = dataset_paths['imagenet'] / split
-    root_dir = _original
+    root_dir = dataset_paths['imagenet'] / split
 
     transform = tvt.Compose([
         tvt.Resize(round(img_size/crop_ratio), interpolation=get_tv_interpolation(interp)),
